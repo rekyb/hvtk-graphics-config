@@ -1,4 +1,4 @@
-# TKLowFX — Low-Effects Config Plugin for LegendOfHeros (ThreeKingdom)
+# TKLowFX — Low-Effects Config Plugin for Heroes' Vow: Three Kingdoms
 
 Date: 2026-10-07
 Status: awaiting user review
@@ -24,7 +24,7 @@ Known non-goal: the ~1033 ms Unity asset-cleanup stutter documented in
 
 ## 2. Environment (verified facts)
 
-- Game: `C:\Program Files (x86)\Steam\steamapps\common\LegendOfHeros\ThreeKingdom.exe`
+- Game: Heroes' Vow: Three Kingdoms — `C:\Program Files (x86)\Steam\steamapps\common\LegendOfHeros\ThreeKingdom.exe`
 - Unity 2021.3.43f1c1, IL2CPP, D3D11, metadata version 31
 - BepInEx 6.0.0-be.788 (Unity IL2CPP, win-x64) installed in game folder;
   interop generated successfully (127 assemblies in `BepInEx/interop/`)

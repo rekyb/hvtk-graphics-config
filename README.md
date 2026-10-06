@@ -1,6 +1,7 @@
 # hvtk-graphics-config
 
-Config-driven low-effects mod for **LegendOfHeros / ThreeKingdom** (Unity 2021.3,
+Config-driven low-effects mod for **Heroes' Vow: Three Kingdoms** (Steam install
+folder: `LegendOfHeros`, Unity 2021.3,
 IL2CPP, Steam) targeting better performance on AMD Ryzen 5 5500U integrated
 graphics.
 

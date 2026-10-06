@@ -1,4 +1,4 @@
-# hvtk-context — LegendOfHeros (ThreeKingdom) Performance Context
+# hvtk-context — Heroes' Vow: Three Kingdoms Performance Context
 
 > Source: converted verbatim from `legend_of_heros_unity_performance_context.json`
 > (kept in `originals\`). This is the original problem context for the low-effects
@@ -14,7 +14,8 @@ performance/stutter on a Ryzen 5 5500U iGPU.
 
 | Field | Value |
 |---|---|
-| Name / install folder | LegendOfHeros / ThreeKingdom |
+| Name | Heroes' Vow: Three Kingdoms |
+| Install folder / exe | `LegendOfHeros` / `ThreeKingdom.exe` |
 | Platform | Windows 11, Steam |
 | Unity version | 2021.3.43f1c1 |
 | Scripting backend | IL2CPP (inferred from GameAssembly.dll / log call stacks) |
