@@ -86,7 +86,7 @@ internal static class GfxConfig
             DisablePlanarReflections = File.Bind("Volumetrics", nameof(DisablePlanarReflections), true, "Disable Ceto PlanarReflection components.");
             DisableAura2 = File.Bind("Volumetrics", nameof(DisableAura2), true, "Disable Aura 2 components (Aura, AuraVolume, AuraCamera).");
 
-            OverrideMode = File.Bind("Antialiasing", nameof(OverrideMode), "KeepOriginal", "PostProcessLayer antialiasing override: None | FastFXAA | FXAA | SMAA | TAA, or KeepOriginal to leave the game default.");
+            OverrideMode = File.Bind("Antialiasing", nameof(OverrideMode), "KeepOriginal", "PostProcessLayer antialiasing override: KeepOriginal (default) or None | FastFXAA | FXAA | SMAA | TAA - FXAA and FastFXAA both use this build's single FastApproximateAntialiasing mode (FastFXAA enables fastMode).");
 
             ReapplyOnSceneLoad = File.Bind("General", nameof(ReapplyOnSceneLoad), true, "Re-run the effect sweep after each scene load.");
             DelaySeconds = File.Bind("General", nameof(DelaySeconds), 2, "Seconds to wait after a scene load before the sweep runs.");

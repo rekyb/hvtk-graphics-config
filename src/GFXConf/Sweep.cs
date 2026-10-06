@@ -352,7 +352,9 @@ internal static class Sweeper
     /// sweep, an unparseable value logs exactly one
     /// <c>[GFXConf] invalid OverrideMode: {value}</c> warning and leaves all
     /// layers untouched, and each found <c>PostProcessLayer</c> gets
-    /// <c>antialiasingMode</c> assigned and counted into <c>aa</c>.
+    /// <c>antialiasingMode</c> assigned (plus <c>fastMode</c> for the
+    /// FastFXAA/FXAA aliases — controller amendment) and counted into
+    /// <c>aa</c> exactly once per layer.
     /// </summary>
     private static void ApplyAntialiasingOverride(Dictionary<string, int> counts)
     {
@@ -362,7 +364,7 @@ internal static class Sweeper
             return; // keep the game default — touch nothing
         }
 
-        if (!TryParseAntialiasingMode(value, out var mode))
+        if (!TryParseAntialiasingMode(value, out var mode, out var fastMode))
         {
             GfxConfig.LogSource?.LogWarning($"[GFXConf] invalid OverrideMode: {value}");
             return;
@@ -391,7 +393,21 @@ internal static class Sweeper
             }
 
             layer.antialiasingMode = mode;
-            counts["aa"]++;
+
+            // Controller amendment: FastFXAA/FXAA set fastMode distinctly
+            // (True/False); None/SMAA/TAA — and full enum member names —
+            // leave fastMode untouched. fastMode is a plain bool on this
+            // build's FastApproximateAntialiasing settings instance.
+            if (fastMode.HasValue)
+            {
+                var faa = layer.fastApproximateAntialiasing;
+                if (faa != null)
+                {
+                    faa.fastMode = fastMode.Value;
+                }
+            }
+
+            counts["aa"]++; // exactly once per layer, regardless of fields written
         }
     }
 
@@ -407,19 +423,31 @@ internal static class Sweeper
     /// alias (spec test 4 sets FXAA), so the documented short names are
     /// normalized to members first; <c>Enum.TryParse</c> then accepts full
     /// member names verbatim. Unknown strings return false → one warning.
+    /// <para>
+    /// Controller amendment — fastMode semantics: <c>FastFXAA</c> → mode +
+    /// <c>fastMode=true</c>; <c>FXAA</c> → mode + <c>fastMode=false</c>;
+    /// <c>None</c>/<c>SMAA</c>/<c>TAA</c> (and full enum member names) →
+    /// mode ONLY, <paramref name="fastMode"/> stays null (untouched).
+    /// </para>
     /// </summary>
-    private static bool TryParseAntialiasingMode(string value, out PostProcessLayer.Antialiasing mode)
+    private static bool TryParseAntialiasingMode(
+        string value, out PostProcessLayer.Antialiasing mode, out bool? fastMode)
     {
+        fastMode = null;
         if (Enum.TryParse(value, true, out mode))
         {
-            return true; // full member name (e.g. "TemporalAntialiasing")
+            return true; // full member name (e.g. "TemporalAntialiasing") — mode only
         }
 
         switch (value.Trim().ToLowerInvariant())
         {
-            case "fxaa":
             case "fastfxaa":
                 mode = PostProcessLayer.Antialiasing.FastApproximateAntialiasing;
+                fastMode = true;
+                return true;
+            case "fxaa":
+                mode = PostProcessLayer.Antialiasing.FastApproximateAntialiasing;
+                fastMode = false;
                 return true;
             case "smaa":
                 mode = PostProcessLayer.Antialiasing.SubpixelMorphologicalAntialiasing;
@@ -429,6 +457,7 @@ internal static class Sweeper
                 return true;
             default:
                 mode = default;
+                fastMode = null;
                 return false;
         }
     }
