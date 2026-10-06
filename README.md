@@ -18,6 +18,8 @@ Implementation not started yet.
 | Path | Purpose |
 |---|---|
 | `docs/hvtk-context.md` | Original performance-analysis context (player log, asset findings, goals) |
+| `docs/development-rules.md` | Rules all code must follow (BepInEx best practices + invariants) |
+| `docs/project-config.md` | Toolchain, paths, metadata, build/deploy commands |
 | `docs/superpowers/specs/` | Design spec |
 | `src/` | Plugin source (planned) |
 | `tools/` | Unity asset analysis scripts (UnityPy) |
