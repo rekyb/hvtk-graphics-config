@@ -30,6 +30,12 @@ implementation follows the approved docs below.
    Never commit game DLLs or binaries (`.gitignore` enforces).
 6. **Identity locked:** GUID `com.rekyb.hvtk.gfxconf`, DLL `TKLowFX.dll`,
    semver versions. Never rename after first release.
+7. **No push without approval.** Never `git push` (any branch, including
+   `main`) unless the user explicitly says so in the current conversation.
+   Workflow: commit locally → present the commit (message + file list + diff
+   summary) to the user for review → push only after explicit approval.
+   The same applies to PRs: create/draft them if asked, but never merge or
+   push without a green light.
 
 ## Workflow
 
@@ -38,7 +44,7 @@ implementation follows the approved docs below.
 - Loop: plan → `dotnet build -c Release` → deploy to `BepInEx\plugins\` →
   test (launch from game dir, **two** `ThreeKingdom.exe` processes, kill
   after) → triage `BepInEx\LogOutput.log` for `TKLowFX|Unhandled exception`
-  → commit → push `main`.
+  → commit → **present for review → push only after explicit user approval**.
 - Doc changes that affect observable behavior (config keys, defaults, log
   formats) ship in the same commit as the code change.
 - Out of scope: asset patching, FPS/frametime logging, the ~1033 ms

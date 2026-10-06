@@ -112,9 +112,13 @@ Derived from research on BepInEx modding best practices (sources at the end).
 
 ## 4. Workflow rules
 
-1. **Plan → build → verify → commit → push.** No direct pushes of untested
-   changes to `main`; every *code* commit must build (`dotnet build`) and
-   doc-only commits must keep spec/config/docs consistent.
+1. **Plan → build → verify → commit → review → push.** No direct pushes of
+   untested changes to `main`; every *code* commit must build
+   (`dotnet build`) and doc-only commits must keep spec/config/docs
+   consistent. **`git push` requires explicit user approval per push** —
+   commit locally first, then present the commit (message, files, diff
+   summary) for the user's review; never push, merge, or publish a PR on
+   your own initiative.
 2. Every behavior change updates the spec/docs in the same commit if it
    changes observable behavior (config keys, defaults, log formats).
 3. Before claiming a feature done: run the relevant test from spec §6 and

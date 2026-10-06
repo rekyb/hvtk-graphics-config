@@ -9,7 +9,7 @@ If a value changes, update this file in the same commit.
 | Field | Value |
 |---|---|
 | Repository | <https://github.com/rekyb/hvtk-graphics-config.git> |
-| Branch | `main` (direct commits, keep in sync with `origin/main`) |
+| Branch | `main` (commits local first; push only with explicit user approval) |
 | Git identity (local) | `rekyb <rekyb@users.noreply.github.com>` |
 | Plugin GUID | `com.rekyb.hvtk.gfxconf` (locked — never change after v0.1.0) |
 | Plugin name | `TKLowFX` |
