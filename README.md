@@ -1,13 +1,6 @@
-# hvtk-graphics-config
+# Heroes' Vow: Three Kingdoms Graphics Config
 
-Config-driven low-effects mod for **Heroes' Vow: Three Kingdoms** (Steam install
-folder: `LegendOfHeros`, Unity 2021.3,
-IL2CPP, Steam) for low-performance devices in general — tested on AMD Ryzen 5
-5500U integrated
-graphics.
-
-Built on **BepInEx 6 (IL2CPP)** — all effects are toggled at runtime via a
-config file; **no game asset files are modified**.
+A lightweight BepInEx mod for Heroes' Vow: Three Kingdoms that trims heavy visual effects to help the game run smoothly on lower-end hardware. It uses BepInEx 6 (IL2CPP) and a simple config file so you can toggle effects on the fly.
 
 ## Status
 
