@@ -1,0 +1,150 @@
+{
+  "task": "Modify a Unity game's assets to reduce unnecessary visual effects and improve performance/stutter on a Ryzen 5 5500U iGPU.",
+  "game": {
+    "name_or_install_folder": "LegendOfHeros / ThreeKingdom",
+    "platform": "Windows 11, Steam",
+    "unity_version": "2021.3.43f1c1",
+    "scripting_backend": "IL2CPP (inferred from GameAssembly.dll / log call stacks)",
+    "graphics_api": "Direct3D 11.0, feature level 11.1",
+    "gpu": "AMD Radeon(TM) Graphics (Ryzen 5 5500U integrated GPU)",
+    "ram": "16 GB",
+    "resolution_seen_in_log": "1600x900"
+  },
+  "original_boot_config": {
+    "memorysetup-main-allocator-block-size": 33554432,
+    "memorysetup-thread-allocator-block-size": 33554432,
+    "memorysetup-gfx-main-allocator-block-size": 33554432,
+    "memorysetup-gfx-thread-allocator-block-size": 16777216,
+    "gfx-enable-gfx-jobs": 1,
+    "gfx-enable-native-gfx-jobs": 1,
+    "wait-for-native-debugger": 0,
+    "hdr-display-enabled": 0,
+    "gc-max-time-slice": 3
+  },
+  "player_log_findings": {
+    "graphics_initialization": [
+      "GfxDevice reports threaded=1 and jobified=1.",
+      "Renderer is AMD Radeon(TM) Graphics.",
+      "Game reports 1600x900 resolution."
+    ],
+    "important_stutter_event": {
+      "description": "Unity synchronously unloaded 17,017 unused assets.",
+      "total_time_ms": 1033.3628,
+      "find_live_objects_ms": 13.8056,
+      "create_object_mapping_ms": 8.3506,
+      "mark_objects_ms": 982.1527,
+      "delete_objects_ms": 29.0533,
+      "interpretation": "At least one major ~1 second stutter is asset cleanup/management, not purely GPU effects."
+    },
+    "other_warnings": [
+      "Repeated: Look rotation viewing vector is zero",
+      "Repeated SceneGuard PauseAllAnimators/ResumePausedAnimators, sometimes involving 100+ animators",
+      "Occasional: DynamicCulling::no cameras assigned",
+      "Missing Behaviour scripts reported",
+      "Custom/LeafWindSwing_Final_Smooth_EdgeFix fallback Transparent/Unlit not found",
+      "Light Probe tetrahedron malformed warnings",
+      "WindowsVideoMedia color-standard warnings"
+    ]
+  },
+  "files_examined_or_available": {
+    "globalgamemanagers": "Uploaded/previously inspected",
+    "globalgamemanagers.assets": "Uploaded/previously inspected",
+    "resources.assets": "Uploaded; approximately 88 MB",
+    "GameValue.json": "Contains gameplay/global constants, not useful graphics configuration",
+    "TKEditor_documentation": "Official data/content modding editor; no clear global graphics controls",
+    "development_tools_pdf": "Shows official development/mod workflow but no clear global graphics settings"
+  },
+  "asset_findings": {
+    "important_note": "Presence of a shader/type does NOT prove that effect is active. Locate active profiles/components and edit their serialized settings/references rather than deleting shaders.",
+    "post_processing_names_seen_or_expected": [
+      "PostProcessProfile",
+      "PostProcessEffectSettings",
+      "Bloom",
+      "AmbientOcclusion",
+      "ScreenSpaceReflections",
+      "MotionBlur",
+      "DepthOfField",
+      "ChromaticAberration",
+      "Grain",
+      "Vignette",
+      "ColorGrading",
+      "AutoExposure"
+    ],
+    "shader_or_system_strings_previously_identified": [
+      "Hidden/Post FX/Bloom",
+      "Hidden/Post FX/Motion Blur",
+      "Hidden/Post FX/Depth Of Field",
+      "Hidden/Post FX/Ambient Occlusion",
+      "Hidden/Post FX/Screen Space Reflection",
+      "Hidden/Post FX/Fog",
+      "Hidden/Post FX/Temporal Anti-aliasing",
+      "Hidden/Post FX/FXAA",
+      "Hidden/PostProcessing/Bloom",
+      "Hidden/PostProcessing/DepthOfField",
+      "Hidden/PostProcessing/MotionBlur",
+      "Hidden/PostProcessing/TemporalAntialiasing",
+      "Hidden/PostProcessing/ScalableAO",
+      "Hidden/PostProcessing/MultiScaleVO",
+      "Hidden/PostProcessing/ScreenSpaceReflections",
+      "Hidden/Aura2/PostProcessShader",
+      "URP VolumetricFog"
+    ],
+    "other_rendering_systems_of_interest": [
+      "Aura2 volumetric lighting/fog",
+      "VolumetricFog / VolumetricFogProfile",
+      "DynamicFog / GlobalFog",
+      "GPU-instanced vegetation / GPUI",
+      "decals",
+      "vegetation/leaf wind shaders"
+    ]
+  },
+  "desired_low_effects_configuration": {
+    "disable_first": {
+      "ScreenSpaceReflections": true,
+      "AmbientOcclusion": true,
+      "MotionBlur": true,
+      "DepthOfField": true,
+      "ChromaticAberration": true,
+      "Aura2_or_volumetric_lighting": true,
+      "VolumetricFog": true
+    },
+    "optional_second_pass": {
+      "Bloom": "disable if safe",
+      "TemporalAA": "disable; prefer FXAA or no AA",
+      "MSAA": "off/lowest if applicable",
+      "ShadowDistance": "reduce to roughly 25-40 if a global setting is found",
+      "ShadowResolution": "low/medium",
+      "LODBias": "roughly 0.6-0.8 if safely configurable"
+    },
+    "keep_initially": {
+      "ColorGrading": true,
+      "AnisotropicFiltering": true,
+      "TextureQuality": "unchanged",
+      "Vignette": "can remain enabled; low priority"
+    }
+  },
+  "modification_strategy": {
+    "preferred_tool": "UABEA (Unity Asset Bundle Extractor Advanced) or another serializer that correctly supports Unity 2021.3 assets.",
+    "user_has_backups": true,
+    "user_is_willing_to_modify_assets_directly": true,
+    "current_state": "User can find PostProcessProfile in UABEA.",
+    "instructions_for_local_agent": [
+      "Inspect resources.assets and relevant sharedassets*.assets using a proper Unity serializer.",
+      "Find actual PostProcessProfile instances and follow m_Settings PPtr references (m_FileID/m_PathID) to effect-setting MonoBehaviours.",
+      "Determine effect type from MonoScript/type tree rather than guessing from PathID.",
+      "Disable expensive effect settings/components using their serialized enabled/active fields.",
+      "Do not blindly set every MonoBehaviour m_Enabled to 0.",
+      "Do not delete/blank shader assets merely because their names match an effect.",
+      "Preserve object table structure, alignment, dependencies, and external references.",
+      "Write a new modified assets file rather than overwriting the only original.",
+      "Prefer a first test disabling SSR, AO, Motion Blur, DOF, Chromatic Aberration and volumetrics; optionally Bloom afterward.",
+      "Report exact PathIDs/types/fields changed so modifications are reproducible/reversible."
+    ]
+  },
+  "performance_goal": {
+    "primary": "Reduce GPU load and frame-time spikes on Ryzen 5 5500U integrated graphics.",
+    "secondary": "Reduce visual effects that are unnecessary to gameplay.",
+    "caveat": "Asset cleanup stutter (~1033 ms event) is a separate issue and may remain even after reducing post-processing."
+  },
+  "request_to_local_agent": "Analyze the local Unity asset files directly and make a safe low-effects variant. Use UABEA/UnityPy or equivalent tooling available locally. Identify actual active PostProcessProfile and effect-setting objects, then disable the expensive effects listed above. Do not guess byte offsets or destroy shaders. Keep backups and produce a detailed change log with file, PathID, type, field, old value, new value."
+}

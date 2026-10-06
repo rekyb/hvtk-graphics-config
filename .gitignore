@@ -1,0 +1,16 @@
+# large game files must never be committed
+originals/*.assets
+*.assets
+*.resource
+*.resS
+
+# build output
+bin/
+obj/
+
+# editor/OS junk
+.vs/
+.idea/
+*.user
+Thumbs.db
+.DS_Store
