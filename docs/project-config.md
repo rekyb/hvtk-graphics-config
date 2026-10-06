@@ -11,7 +11,7 @@ If a value changes, update this file in the same commit.
 | Repository | <https://github.com/rekyb/hvtk-graphics-config.git> |
 | Branch | `main` (direct commits, keep in sync with `origin/main`) |
 | Git identity (local) | `rekyb <rekyb@users.noreply.github.com>` |
-| Plugin GUID | `com.rekyb.hvtk.tklowfx` (locked — never change after v0.1.0) |
+| Plugin GUID | `com.rekyb.hvtk.gfxconf` (locked — never change after v0.1.0) |
 | Plugin name | `TKLowFX` |
 | Version | `0.1.0` (semver; bump per release) |
 | Config file | `<game>/BepInEx/config/tklowfx.cfg` |

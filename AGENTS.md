@@ -28,7 +28,7 @@ implementation follows the approved docs below.
    `dotnet build` output + `LogOutput.log` lines + sweep summary counts.
 5. **No NuGet dependencies** beyond BepInEx core + game interop references.
    Never commit game DLLs or binaries (`.gitignore` enforces).
-6. **Identity locked:** GUID `com.rekyb.hvtk.tklowfx`, DLL `TKLowFX.dll`,
+6. **Identity locked:** GUID `com.rekyb.hvtk.gfxconf`, DLL `TKLowFX.dll`,
    semver versions. Never rename after first release.
 
 ## Workflow

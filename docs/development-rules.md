@@ -47,7 +47,7 @@ Derived from research on BepInEx modding best practices (sources at the end).
 
   | Field | Value |
   |---|---|
-  | GUID | `com.rekyb.hvtk.tklowfx` |
+  | GUID | `com.rekyb.hvtk.gfxconf` |
   | Name | `TKLowFX` |
   | Version | `0.1.0` |
 
