@@ -1,12 +1,17 @@
 using System;
 using BepInEx;
 using BepInEx.Unity.IL2CPP;
+using UnityEngine.SceneManagement;
 
 namespace GFXConf;
 
 [BepInPlugin("com.rekyb.hvtk.gfxconf", "GFXConf", "0.1.0")]
 public class Plugin : BasePlugin
 {
+    // Strong reference so the managed handler cannot be collected while the
+    // native side holds only the converted il2cpp delegate (Review Focus 1).
+    private static Action<Scene, LoadSceneMode> _sceneLoadedHandler;
+
     public override void Load()
     {
         try
@@ -17,6 +22,26 @@ public class Plugin : BasePlugin
             GfxConfig.Bind();
             Log.LogInfo("[GFXConf] v0.1.0 loaded (com.rekyb.hvtk.gfxconf)");
             Log.LogInfo($"[GFXConf] config: {GfxConfig.File?.ConfigFilePath ?? "(config unavailable)"}");
+
+            GfxBehaviour.EnsureCreated();
+
+            // Review Focus 1: this interop exposes NO .NET events — the
+            // subscription is a direct add_sceneLoaded(UnityAction) call, and
+            // the managed→il2cpp delegate conversion inside it
+            // (UnityAction.op_Implicit → DelegateSupport.ConvertDelegate) is
+            // the known-riskiest line. Isolated so a failure warns instead of
+            // aborting Load(); the game must still boot without it.
+            try
+            {
+                _sceneLoadedHandler = OnSceneLoaded;
+                SceneManager.add_sceneLoaded(_sceneLoadedHandler);
+            }
+            catch (Exception ex)
+            {
+                Log.LogWarning($"[GFXConf] sceneLoaded subscribe failed: {ex}");
+            }
+
+            Sweeper.Request("startup", GfxConfig.DelaySeconds.Value);
         }
         catch (Exception ex)
         {
@@ -29,6 +54,31 @@ public class Plugin : BasePlugin
                 // Log itself failed — last-resort fallback, never rethrow from Load()
                 Console.WriteLine($"[GFXConf] load failed: {ex}");
             }
+        }
+    }
+
+    private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
+    {
+        try
+        {
+            // Self-heal: boot-time creation can be destroyed by the game during
+            // the first scene transition (proven in testing) — re-ensure the
+            // pump once the load has completed.
+            GfxBehaviour.EnsureCreated();
+
+            if (!GfxConfig.ReapplyOnSceneLoad.Value)
+            {
+                return;
+            }
+
+            var sceneName = scene.name;
+            Sweeper.Request(
+                string.IsNullOrEmpty(sceneName) ? $"handle{scene.handle}" : sceneName,
+                GfxConfig.DelaySeconds.Value);
+        }
+        catch (Exception ex)
+        {
+            Log.LogWarning($"[GFXConf] sceneLoaded handler failed: {ex}");
         }
     }
 }
