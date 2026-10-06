@@ -6,7 +6,8 @@ Scope path: architectural (new project — BepInEx 6 IL2CPP plugin)
 
 ## 1. Goal
 
-Reduce GPU load and frame-time spikes on AMD Ryzen 5 5500U iGPU by disabling
+Reduce GPU load and frame-time spikes on low-performance devices (reference
+hardware: AMD Ryzen 5 5500U iGPU) by disabling
 expensive visual effects **at runtime**, controlled by an easy-to-edit config
 file, without modifying any game asset file.
 

@@ -8,7 +8,8 @@
 ## Task
 
 Modify a Unity game's assets to reduce unnecessary visual effects and improve
-performance/stutter on a Ryzen 5 5500U iGPU.
+performance/stutter on low-performance devices (reference/test hardware:
+Ryzen 5 5500U iGPU).
 
 ## Game
 
@@ -164,7 +165,9 @@ Instructions for the local agent:
 
 ## Performance goal
 
-- **Primary:** reduce GPU load and frame-time spikes on Ryzen 5 5500U integrated graphics.
+- **Primary:** reduce GPU load and frame-time spikes on low-performance devices
+  (reference hardware: Ryzen 5 5500U integrated graphics — the mod targets the
+  device class, not this specific GPU).
 - **Secondary:** reduce visual effects that are unnecessary to gameplay.
 - **Caveat:** asset cleanup stutter (~1033 ms event) is a separate issue and may
   remain even after reducing post-processing.

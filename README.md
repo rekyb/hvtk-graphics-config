@@ -2,7 +2,8 @@
 
 Config-driven low-effects mod for **Heroes' Vow: Three Kingdoms** (Steam install
 folder: `LegendOfHeros`, Unity 2021.3,
-IL2CPP, Steam) targeting better performance on AMD Ryzen 5 5500U integrated
+IL2CPP, Steam) for low-performance devices in general — tested on AMD Ryzen 5
+5500U integrated
 graphics.
 
 Built on **BepInEx 6 (IL2CPP)** — all effects are toggled at runtime via a

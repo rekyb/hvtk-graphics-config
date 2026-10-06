@@ -1,8 +1,9 @@
 # Project instructions — hvtk-graphics-config (TKLowFX)
 
 Config-driven low-effects **BepInEx 6 IL2CPP plugin** for *Heroes' Vow: Three
-Kingdoms* (Steam, Unity 2021.3, IL2CPP metadata v31), targeting the Ryzen 5
-5500U iGPU. Design/spec phase → implementation follows the approved docs below.
+Kingdoms* (Steam, Unity 2021.3, IL2CPP metadata v31), targeting low-performance
+devices generally (reference hardware: Ryzen 5 5500U iGPU). Design/spec phase →
+implementation follows the approved docs below.
 
 ## Read before working
 
