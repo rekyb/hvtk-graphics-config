@@ -1,3 +1,4 @@
+using System;
 using BepInEx;
 using BepInEx.Unity.IL2CPP;
 
@@ -12,9 +13,17 @@ public class Plugin : BasePlugin
         {
             Log.LogInfo("[GFXConf] v0.1.0 loaded (com.rekyb.hvtk.gfxconf)");
         }
-        catch
+        catch (Exception ex)
         {
-            // suppress to avoid crash on load
+            try
+            {
+                Log.LogWarning($"[GFXConf] load failed: {ex}");
+            }
+            catch
+            {
+                // Log itself failed — last-resort fallback, never rethrow from Load()
+                Console.WriteLine($"[GFXConf] load failed: {ex}");
+            }
         }
     }
 }
