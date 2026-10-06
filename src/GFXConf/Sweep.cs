@@ -22,13 +22,15 @@ internal static class Sweeper
     private static float _dueTime;
 
     /// <summary>
-    /// Original <c>active</c> captured on the first modification of a settings
-    /// instance (keyed by the wrapper instance — Il2CppInterop pools wrappers
-    /// per native pointer, and this strong reference keeps the key stable
-    /// across sweeps while an effect is held disabled).
-    /// Entries are removed on release so a later disable recaptures freshly.
+    /// Original <c>active</c> and <c>enabled.value</c> captured on the first
+    /// modification of a settings instance (keyed by the wrapper instance —
+    /// Il2CppInterop pools wrappers per native pointer, and this strong
+    /// reference keeps the key stable across sweeps while an effect is held
+    /// disabled). Release runs ONLY for entries present here (never-disabled
+    /// effects are left untouched); entries are removed on release so a later
+    /// disable recaptures freshly.
     /// </summary>
-    private static readonly Dictionary<PostProcessEffectSettings, bool> _originalActive = new();
+    private static readonly Dictionary<PostProcessEffectSettings, (bool Active, bool Value)> _originalActive = new();
 
     /// <summary>
     /// Logs the schedule line, then stores label + due time. A newer Request
@@ -125,11 +127,12 @@ internal static class Sweeper
 
                             if (toggle.Value)
                             {
-                                // Disable: capture stock `active` on FIRST
-                                // modification only, then force the effect off.
+                                // Disable: capture stock `active` AND stock
+                                // `enabled.value` on FIRST modification only,
+                                // then force the effect off.
                                 if (!_originalActive.ContainsKey(effect))
                                 {
-                                    _originalActive[effect] = effect.active;
+                                    _originalActive[effect] = (effect.active, effect.enabled.value);
                                 }
 
                                 effect.active = false;
@@ -137,15 +140,17 @@ internal static class Sweeper
                                 effect.enabled.overrideState = true;
                                 counts[typeName]++;
                             }
-                            else
+                            else if (_originalActive.TryGetValue(effect, out var original))
                             {
-                                // Release (Review Focus 2): drop the override
-                                // and restore stock `active` exactly as
-                                // captured (fallback if uncaptured: true).
+                                // Release (Review Focus 2): ONLY effects this
+                                // plugin disabled this session are touched —
+                                // never-disabled settings are left completely
+                                // untouched. Restore stock `active` AND stock
+                                // `enabled.value` exactly as captured, then
+                                // drop the override, then forget.
+                                effect.active = original.Active;
+                                effect.enabled.value = original.Value;
                                 effect.enabled.overrideState = false;
-                                effect.active = _originalActive.TryGetValue(effect, out var originalActive)
-                                    ? originalActive
-                                    : true;
                                 _originalActive.Remove(effect);
                             }
                         }
