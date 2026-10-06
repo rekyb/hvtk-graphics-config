@@ -41,6 +41,11 @@
       <HintPath>$(GameDir)\BepInEx\interop\UnityEngine.IMGUIModule.dll</HintPath>
       <Private>false</Private>
     </Reference>
+    <!-- FontStyle (GUI.skin labels) lives here, per compiler CS0012. -->
+    <Reference Include="UnityEngine.TextRenderingModule">
+      <HintPath>$(GameDir)\BepInEx\interop\UnityEngine.TextRenderingModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
     <!-- Note: UnityEngine.SceneManagementModule.dll does not exist in this
          game's interop folder; SceneManagement types (SceneManager,
          LoadSceneMode, ...) are defined in UnityEngine.CoreModule.dll. -->
