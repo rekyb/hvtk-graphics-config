@@ -11,7 +11,12 @@ public class Plugin : BasePlugin
     {
         try
         {
+            // BasePlugin.Log is an instance member; GfxConfig is static — hand
+            // it the log source first so bind failures can still be warned about.
+            GfxConfig.LogSource = Log;
+            GfxConfig.Bind();
             Log.LogInfo("[GFXConf] v0.1.0 loaded (com.rekyb.hvtk.gfxconf)");
+            Log.LogInfo($"[GFXConf] config: {GfxConfig.File?.ConfigFilePath ?? "(config unavailable)"}");
         }
         catch (Exception ex)
         {
