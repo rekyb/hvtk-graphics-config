@@ -1,4 +1,4 @@
-# Project Config — hvtk-graphics-config (TKLowFX)
+# Project Config — hvtk-graphics-config (GFXConf)
 
 Date: 2026-10-07 · Status: active
 Single reference for toolchain, paths, metadata, and commands.
@@ -12,9 +12,9 @@ If a value changes, update this file in the same commit.
 | Branch | `main` (commits local first; push only with explicit user approval) |
 | Git identity (local) | `rekyb <rekyb@users.noreply.github.com>` |
 | Plugin GUID | `com.rekyb.hvtk.gfxconf` (locked — never change after v0.1.0) |
-| Plugin name | `TKLowFX` |
+| Plugin name | `GFXConf` |
 | Version | `0.1.0` (semver; bump per release) |
-| Config file | `<game>/BepInEx/config/tklowfx.cfg` |
+| Config file | `<game>/BepInEx/config/gfxconf.cfg` |
 
 ## 2. Toolchain
 
@@ -40,7 +40,7 @@ If a value changes, update this file in the same commit.
 | Plugin deploy dir | `BepInEx\plugins\` ← **only** build output target |
 | Runtime log | `BepInEx\LogOutput.log` |
 | BepInEx config | `BepInEx\config\BepInEx.cfg` (console/logging toggles) |
-| Plugin config | `BepInEx\config\tklowfx.cfg` (auto-created on first run) |
+| Plugin config | `BepInEx\config\gfxconf.cfg` (auto-created on first run) |
 
 Key interop assemblies referenced by the plugin:
 
@@ -61,8 +61,8 @@ test-mod\  (= repo root)
 │   ├── hvtk-context.md             # original performance context (converted)
 │   ├── development-rules.md        # rules all code must follow
 │   ├── project-config.md           # this file
-│   └── superpowers\specs\2026-10-07-tklowfx-design.md   # approved spec
-├── src\TKLowFX\               # plugin project (Plugin/Config/Sweep/Overlay .cs)
+│   └── superpowers\specs\2026-10-07-gfxconf-design.md   # approved spec
+├── src\GFXConf\               # plugin project (Plugin/Config/Sweep/Overlay .cs)
 ├── tools\                     # UnityPy analysis scripts
 │   └── out\catalog.json           # asset scan catalog
 └── originals\                 # NOT committed (git-ignored binaries + source JSON)
@@ -72,10 +72,10 @@ test-mod\  (= repo root)
 
 ```powershell
 # build
-dotnet build C:\Users\rekyb\Desktop\test-mod\src\TKLowFX\TKLowFX.csproj -c Release
+dotnet build C:\Users\rekyb\Desktop\test-mod\src\GFXConf\GFXConf.csproj -c Release
 
 # deploy (also automated via csproj PostBuild copy)
-Copy-Item ...\src\TKLowFX\bin\Release\net6.0\TKLowFX.dll `
+Copy-Item ...\src\GFXConf\bin\Release\net6.0\GFXConf.dll `
   "C:\Program Files (x86)\Steam\steamapps\common\LegendOfHeros\BepInEx\plugins\" -Force
 
 # test launch (expect two ThreeKingdom.exe processes; kill after test)
@@ -84,7 +84,7 @@ Start-Process -FilePath "C:\Program Files (x86)\Steam\steamapps\common\LegendOfH
 
 # triage log
 Select-String -Path "C:\Program Files (x86)\Steam\steamapps\common\LegendOfHeros\BepInEx\LogOutput.log" `
-  -Pattern "TKLowFX|Unhandled exception|LogError"
+  -Pattern "GFXConf|Unhandled exception|LogError"
 ```
 
 ## 6. csproj conventions
@@ -93,13 +93,13 @@ Select-String -Path "C:\Program Files (x86)\Steam\steamapps\common\LegendOfHeros
   `$(GameDir)` property (defined once, overridable) — no DLLs copied into the
   repo.
 - `Private=false` on all game/BepInEx references (never copy them to output).
-- PostBuild target: copy `TKLowFX.dll` → `$(GameDir)\BepInEx\plugins\`.
+- PostBuild target: copy `GFXConf.dll` → `$(GameDir)\BepInEx\plugins\`.
 - Warnings-as-errors on our own code where practical; no `unsafe` blocks.
 
 ## 7. Test checklist pointer
 
 The acceptance tests live in the spec §6
-(`docs/superpowers/specs/2026-10-07-tklowfx-design.md`): boot smoke test,
+(`docs/superpowers/specs/2026-10-07-gfxconf-design.md`): boot smoke test,
 scene coverage counts, toggle proof, AA override, F10 overlay, uninstall,
 crash safety. Run the relevant ones before marking anything done and attach
 `LogOutput.log` evidence.

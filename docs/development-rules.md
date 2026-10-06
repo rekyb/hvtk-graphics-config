@@ -1,4 +1,4 @@
-# Development Rules — hvtk-graphics-config (TKLowFX)
+# Development Rules — hvtk-graphics-config (GFXConf)
 
 Date: 2026-10-07 · Status: active
 Applies to all code, scripts, and configs added to this repository from now on.
@@ -16,7 +16,7 @@ Derived from research on BepInEx modding best practices (sources at the end).
    An exception escaping into Unity/BepInEx callbacks is a failure, even if the
    feature "would have worked".
 4. **Config file is the source of truth.** All behavior is driven by
-   `BepInEx/config/tklowfx.cfg`; the F10 overlay only edits that file. No
+   `BepInEx/config/gfxconf.cfg`; the F10 overlay only edits that file. No
    hidden state.
 5. **Never re-enable or delete game content we didn't target** — no blanket
    `m_Enabled = false`, no shader deletion, no profile asset edits (from the
@@ -48,7 +48,7 @@ Derived from research on BepInEx modding best practices (sources at the end).
   | Field | Value |
   |---|---|
   | GUID | `com.rekyb.hvtk.gfxconf` |
-  | Name | `TKLowFX` |
+  | Name | `GFXConf` |
   | Version | `0.1.0` |
 
 ### 2.3 Logging
@@ -57,7 +57,7 @@ Derived from research on BepInEx modding best practices (sources at the end).
 - Levels: `LogDebug` for per-object detail (behind a config/debug flag),
   `LogInfo` for lifecycle + one **summary line per sweep**,
   `LogWarning` for caught errors/missing types, `LogError` almost never.
-- One `[TKLowFX]` prefix, one line per event — no spam, no per-frame logging
+- One `[GFXConf]` prefix, one line per event — no spam, no per-frame logging
   (the game log already has warnings; don't make triage harder).
 - A clean log is a test artifact: after any run, `LogOutput.log` must show no
   `Unhandled exception` and no `LogError` from us.
@@ -98,7 +98,7 @@ Derived from research on BepInEx modding best practices (sources at the end).
 - **Language/target:** C# , `net6.0`, SDK-style csproj, `EnableDynamicLoading`.
 - **Zero third-party dependencies** beyond BepInEx + interop references.
   Anything new needs explicit approval first.
-- **File layout** in `src/TKLowFX/`:
+- **File layout** in `src/GFXConf/`:
   - `Plugin.cs` — attributes, `Awake`, subscriptions, lifecycle
   - `Config.cs` — all `ConfigEntry` bindings in one place (single schema
     reference, mirrors spec §4.2)

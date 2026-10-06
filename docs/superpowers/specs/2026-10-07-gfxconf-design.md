@@ -1,7 +1,7 @@
-# TKLowFX — Low-Effects Config Plugin for Heroes' Vow: Three Kingdoms
+# GFXConf — Low-Effects Config Plugin for Heroes' Vow: Three Kingdoms
 
 Date: 2026-10-07
-Status: awaiting user review
+Status: approved by user 2026-10-07 (implementation may proceed)
 Scope path: architectural (new project — BepInEx 6 IL2CPP plugin)
 
 ## 1. Goal
@@ -62,9 +62,9 @@ DynamicFog profiles, all profile assets, `m_Enabled` of unrelated components.
 
 ## 4. Architecture
 
-Single BepInEx BasePlugin (`TKLowFX`) in `src/TKLowFX/`, deployed as one DLL to
-`<game>/BepInEx/plugins/TKLowFX.dll`. Config file (BepInEx `ConfigFile`, TOML)
-at `<game>/BepInEx/config/tklowfx.cfg` — source of truth. In-game F10 overlay
+Single BepInEx BasePlugin (`GFXConf`) in `src/GFXConf/`, deployed as one DLL to
+`<game>/BepInEx/plugins/GFXConf.dll`. Config file (BepInEx `ConfigFile`, TOML)
+at `<game>/BepInEx/config/gfxconf.cfg` — source of truth. In-game F10 overlay
 (IMGUI) edits the same ConfigFile entries and saves.
 
 ### 4.1 Data flow
@@ -86,7 +86,7 @@ at `<game>/BepInEx/config/tklowfx.cfg` — source of truth. In-game F10 overlay
      `PostProcessLayer`, parse config string to enum by name and assign
      `antialiasingMode`.
    - Log one summary line per sweep:
-     `"[TKLowFX] scene=73: AO=4, CA=4, SCPE.Fog=4, VolumetricFog=4, planar=0"`.
+     `"[GFXConf] scene=73: AO=4, CA=4, SCPE.Fog=4, VolumetricFog=4, planar=0"`.
 4. F10 overlay: toggles for every config entry; on change → `ConfigFile.Save()`
    + immediate sweep (effects flip live).
 
@@ -132,7 +132,7 @@ EnableF10Overlay = true
 
 ## 5. Build & deploy
 
-- `src/TKLowFX/TKLowFX.csproj`: SDK-style, `net6.0`, `EnableDynamicLoading`,
+- `src/GFXConf/GFXConf.csproj`: SDK-style, `net6.0`, `EnableDynamicLoading`,
   references BepInEx core DLLs from `<game>/BepInEx/core/` and interop DLLs
   from `<game>/BepInEx/interop/` (HintPaths; game folder is read dependency,
   never written by build output except plugins dir).
@@ -157,10 +157,10 @@ EnableF10Overlay = true
 
 ## 7. Deliverables
 
-- `src/TKLowFX/` — plugin source (csproj + Plugin.cs + Overlay.cs)
-- `docs/superpowers/specs/2026-10-07-tklowfx-design.md` — this spec
+- `src/GFXConf/` — plugin source (csproj + Plugin.cs + Overlay.cs)
+- `docs/superpowers/specs/2026-10-07-gfxconf-design.md` — this spec
 - `docs/superpowers/plans/…` — implementation plan (next step)
-- Installed artifact: `TKLowFX.dll` + generated `tklowfx.cfg` in game folder
+- Installed artifact: `GFXConf.dll` + generated `gfxconf.cfg` in game folder
 - `docs/user-guide.md` — install/uninstall/config reference for the user
 
 ## 8. Explicitly out of scope
