@@ -23,14 +23,6 @@ internal static class Sweeper
     private static float _dueTime;
 
     /// <summary>
-    /// The full summary line <see cref="RunNow"/> last logged (empty until
-    /// the first sweep) — displayed verbatim by the F10 overlay footer.
-    /// Set alongside the LogInfo call only; nothing else about the sweep
-    /// (byte format, release semantics, caches) changes.
-    /// </summary>
-    internal static string LastSummary { get; private set; } = string.Empty;
-
-    /// <summary>
     /// Component type full names, verified against the shipped interop DLLs
     /// (spec §3): <c>VolumetricFogAndMist.VolumetricFog</c> and
     /// <c>Ceto.PlanarReflection</c> live in Assembly-CSharp-firstpass.dll;
@@ -264,7 +256,6 @@ internal static class Sweeper
             }
 
             var summary = $"[GFXConf] scene={sceneLabel}: AO={counts["AmbientOcclusion"]}, CA={counts["ChromaticAberration"]}, DoF={counts["DepthOfField"]}, SSR={counts["ScreenSpaceReflections"]}, MB={counts["MotionBlur"]}, Bloom={counts["Bloom"]}, SCPE.Fog={counts["Fog"]}, SCPE.CloudShadows={counts["CloudShadows"]}, SCPE.AO2D={counts["AmbientOcclusion2D"]}, SCPE.Blur={counts["Blur"]}, SCPE.Sharpen={counts["Sharpen"]}, VolumetricFog={counts["VolumetricFog"]}, planar={counts["planar"]}, aura={counts["aura"]}, aa={counts["aa"]}";
-            LastSummary = summary;
             GfxConfig.LogSource?.LogInfo(summary);
         }
         catch (Exception ex)

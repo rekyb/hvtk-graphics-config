@@ -63,12 +63,6 @@ internal sealed class GfxBehaviour : MonoBehaviour
     private const float HeaderHeight = 26f;
 
     /// <summary>
-    /// Fixed footer height (F10 hint + word-wrapped last summary) reserved
-    /// at the panel bottom, OUTSIDE the scroll view, so both stay visible.
-    /// </summary>
-    private const float FooterHeight = 80f;
-
-    /// <summary>
     /// Scroll position of the controls area. One field shared by both draw
     /// paths (only one path renders per session — <see cref="_panelMode"/>
     /// is sticky), so switching paths never loses the user's position.
@@ -77,9 +71,6 @@ internal sealed class GfxBehaviour : MonoBehaviour
 
     /// <summary>Bold section header style, created once on first draw.</summary>
     private static GUIStyle _sectionStyle;
-
-    /// <summary>Word-wrapping label style for the long summary line.</summary>
-    private static GUIStyle _wrapStyle;
 
     /// <summary>
     /// The <c>OverrideMode</c> cycle (spec §4.2 domain) in contract order:
@@ -236,9 +227,9 @@ internal sealed class GfxBehaviour : MonoBehaviour
 
     /// <summary>
     /// Fixed-panel fallback: opaque background box, the controls in a
-    /// scroll view (all 18 entries reachable at any resolution), a fixed
-    /// footer (F10 hint + last sweep summary, always visible), then the
-    /// title strip with the close X. Begin/EndArea and Begin/EndScrollView
+    /// scroll view (all 18 entries reachable at any resolution) filling the
+    /// panel below the header, then the title strip with the close X.
+    /// Begin/EndArea and Begin/EndScrollView
     /// are protected by finally so a throwing control can never leave the
     /// global layout stack unbalanced (it would corrupt every later
     /// GUILayout draw, including the game's own).
@@ -247,11 +238,9 @@ internal sealed class GfxBehaviour : MonoBehaviour
     {
         var panel = ClampToScreen(PanelRect);
         var header = new Rect(panel.x, panel.y, panel.width, HeaderHeight);
-        var footer = new Rect(
-            panel.x + 2f, panel.yMax - FooterHeight - 2f, panel.width - 4f, FooterHeight);
         var scroll = new Rect(
             panel.x + 2f, header.yMax + 2f, panel.width - 4f,
-            Mathf.Max(40f, footer.y - header.yMax - 6f));
+            Mathf.Max(40f, panel.yMax - header.yMax - 4f));
 
         FillOpaque(panel); // R2 round 4: solid, fully opaque dark background
         GUI.Box(panel, string.Empty, GUI.skin.window);
@@ -276,16 +265,6 @@ internal sealed class GfxBehaviour : MonoBehaviour
         }
 
         _scroll = next;
-
-        GUILayout.BeginArea(footer);
-        try
-        {
-            DrawFooter();
-        }
-        finally
-        {
-            GUILayout.EndArea();
-        }
 
         GUI.Box(header, "GFXConf overlay", GUI.skin.box);
         DrawCloseButton(header);
@@ -358,7 +337,7 @@ internal sealed class GfxBehaviour : MonoBehaviour
     /// frame deeper and logged by Il2CppInterop as an error), so the content
     /// guards itself: a failure warns once, switches to the panel path and
     /// draws nothing for this event. Shares the panel path's presentation:
-    /// opaque background, close X, scrollable controls, fixed footer.
+    /// opaque background, close X, scrollable controls.
     /// </summary>
     private static void DrawWindow(int id)
     {
@@ -381,7 +360,6 @@ internal sealed class GfxBehaviour : MonoBehaviour
             }
 
             _scroll = next;
-            DrawFooter();
         }
         catch (Exception ex)
         {
@@ -395,15 +373,13 @@ internal sealed class GfxBehaviour : MonoBehaviour
     /// their 5 section headers. No reflection — only the known
     /// <see cref="GfxConfig"/> entries are ever listed. A null entry (Bind
     /// failed) draws a placeholder instead of throwing. Used by both the
-    /// GUILayout.Window and the panel path; the footer lives outside the
-    /// scroll view (see <see cref="DrawFooter"/>).
+    /// GUILayout.Window and the panel path.
     /// </summary>
     private static void DrawControls()
     {
         if (_sectionStyle == null)
         {
             _sectionStyle = new GUIStyle(GUI.skin.label) { fontStyle = FontStyle.Bold };
-            _wrapStyle = new GUIStyle(GUI.skin.label) { wordWrap = true };
         }
 
         DrawSection("[PPv2]");
@@ -435,21 +411,6 @@ internal sealed class GfxBehaviour : MonoBehaviour
         DrawToggle(GfxConfig.EnableF10Overlay);
     }
 
-    /// <summary>
-    /// Fixed footer (outside the scroll view so it stays visible at any
-    /// resolution): the F10 hint plus the last sweep summary, word-wrapped
-    /// to the available width. Used by both draw paths.
-    /// </summary>
-    private static void DrawFooter()
-    {
-        GUILayout.Space(6f);
-        GUILayout.Label("F10 = close");
-        var summary = Sweeper.LastSummary;
-        GUILayout.Label(
-            string.IsNullOrEmpty(summary) ? "last sweep: (none yet)" : summary,
-            _wrapStyle);
-    }
-
     private static void DrawSection(string title)
     {
         GUILayout.Space(4f);
@@ -457,9 +418,9 @@ internal sealed class GfxBehaviour : MonoBehaviour
     }
 
     /// <summary>
-    /// One row per bool entry: checkbox state IS the current value, and the
-    /// label repeats it so it is readable at a glance. A change writes the
-    /// entry, saves the cfg and sweeps immediately.
+    /// One row per bool entry: checkbox state IS the current value; the
+    /// label is the bare config key (value shown by the checkbox itself).
+    /// A change writes the entry, saves the cfg and sweeps immediately.
     /// </summary>
     private static void DrawToggle(ConfigEntry<bool> entry)
     {
@@ -470,7 +431,7 @@ internal sealed class GfxBehaviour : MonoBehaviour
         }
 
         var current = entry.Value;
-        var next = GUILayout.Toggle(current, $"{entry.Definition.Key} = {current}");
+        var next = GUILayout.Toggle(current, entry.Definition.Key);
         if (next != current)
         {
             entry.Value = next;
