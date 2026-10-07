@@ -25,7 +25,10 @@ internal sealed class GfxBehaviour : MonoBehaviour
     // single pump instance, and statics are proven to work on this injected
     // type (the _registered/_created flags already rely on it).
 
-    /// <summary>Overlay visibility — flipped by F10 only while the gate allows it.</summary>
+    /// <summary>
+    /// Overlay visibility — F10 always closes it; opening requires
+    /// <c>EnableF10Overlay = true</c> (gate applies to opening only).
+    /// </summary>
     private static bool _visible;
 
     /// <summary>Initial window position/size for the GUILayout.Window path.</summary>
@@ -134,12 +137,15 @@ internal sealed class GfxBehaviour : MonoBehaviour
             GfxConfig.LogSource?.LogWarning($"[GFXConf] pump tick failed: {ex}");
         }
 
-        // F10 toggle (contract): gate evaluated FIRST — when
-        // EnableF10Overlay is false there is no F10 response at all, not
-        // even a log line. A null entry (Bind failed → already warned once)
-        // counts as disabled too. GetKeyDown is only read once per frame,
-        // and any thrown failure latches F10 off for the session so a
-        // persistent input error cannot warn every frame.
+        // F10 toggle (contract amendment — gate exempts CLOSING): the key is
+        // ALWAYS read (no gate before GetKeyDown). An open overlay closes on
+        // F10 regardless of EnableF10Overlay, so unchecking the toggle while
+        // the overlay is open can never lock the user out of closing it. Only
+        // OPENING is gated: EnableF10Overlay false (or null — Bind failed,
+        // already warned once) → F10 does nothing while closed, no log line.
+        // GetKeyDown is only read once per frame, and any thrown failure
+        // latches F10 off for the session so a persistent input error cannot
+        // warn every frame.
         if (_f10Broken)
         {
             return;
@@ -147,11 +153,22 @@ internal sealed class GfxBehaviour : MonoBehaviour
 
         try
         {
-            var gate = GfxConfig.EnableF10Overlay;
-            if (gate != null && gate.Value && UnityEngine.Input.GetKeyDown(UnityEngine.KeyCode.F10))
+            if (UnityEngine.Input.GetKeyDown(UnityEngine.KeyCode.F10))
             {
-                _visible = !_visible;
-                GfxConfig.LogSource?.LogInfo(_visible ? "[GFXConf] overlay opened" : "[GFXConf] overlay closed");
+                if (_visible)
+                {
+                    _visible = false;
+                    GfxConfig.LogSource?.LogInfo("[GFXConf] overlay closed");
+                }
+                else
+                {
+                    var gate = GfxConfig.EnableF10Overlay;
+                    if (gate != null && gate.Value)
+                    {
+                        _visible = true;
+                        GfxConfig.LogSource?.LogInfo("[GFXConf] overlay opened");
+                    }
+                }
             }
         }
         catch (Exception ex)
