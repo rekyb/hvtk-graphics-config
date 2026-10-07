@@ -71,14 +71,29 @@ internal sealed class GfxBehaviour : MonoBehaviour
     private static bool _eventSystemTypeResolved;
 
     /// <summary>
-    /// Fixed panel geometry for the fallback path (position/size are fixed
-    /// per contract). Per draw it is clamped into the screen by
+    /// Default panel geometry for the fallback path (size is fixed per
+    /// contract; the x/y are only the DEFAULT position — the panel can be
+    /// dragged by its title bar and <see cref="OpenOverlay"/> snaps it back
+    /// here on every open). Per draw it is clamped into the screen by
     /// <see cref="ClampToScreen"/> so the panel never runs off-screen.
     /// </summary>
     private static readonly Rect PanelRect = new(16f, 16f, 360f, 620f);
 
     /// <summary>Title strip height — drawn on top of the panel background.</summary>
     private const float HeaderHeight = 26f;
+
+    /// <summary>
+    /// Session-only panel position, seeded from the <see cref="PanelRect"/>
+    /// default (top-left). Never persisted to the cfg — <see cref="OpenOverlay"/>
+    /// snaps it back to the default on every open.
+    /// </summary>
+    private static Vector2 _panelPos = new(PanelRect.x, PanelRect.y);
+
+    /// <summary>True while a title-bar drag is in progress.</summary>
+    private static bool _dragging;
+
+    /// <summary>Mouse offset from the panel origin at drag start.</summary>
+    private static Vector2 _dragOffset;
 
     /// <summary>
     /// Scroll position of the controls area. One field shared by both draw
@@ -253,7 +268,9 @@ internal sealed class GfxBehaviour : MonoBehaviour
     /// </summary>
     private static void DrawPanel()
     {
-        var panel = ClampToScreen(PanelRect);
+        HandleHeaderDrag();
+        var panel = ClampToScreen(new Rect(
+            _panelPos.x, _panelPos.y, PanelRect.width, PanelRect.height));
         var header = new Rect(panel.x, panel.y, panel.width, HeaderHeight);
         var scroll = new Rect(
             panel.x + 2f, header.yMax + 2f, panel.width - 4f,
@@ -285,6 +302,48 @@ internal sealed class GfxBehaviour : MonoBehaviour
 
         GUI.Box(header, "GFXConf overlay", GUI.skin.box);
         DrawCloseButton(header);
+    }
+
+    /// <summary>
+    /// Title-bar dragging (session-only): MouseDown inside the header
+    /// (outside the close-X rect, so clicking X still closes instead of
+    /// starting a drag) latches a grab with the grab offset; MouseDrag
+    /// moves <see cref="_panelPos"/>, clamped to the screen every event so
+    /// the panel can never be dragged off-screen; MouseUp releases. Runs
+    /// only on IMGUI mouse events — no per-frame allocations. Called at the
+    /// top of <see cref="DrawPanel"/> before the geometry is computed, so
+    /// the drag and the drawn panel always agree on the position.
+    /// </summary>
+    private static void HandleHeaderDrag()
+    {
+        var e = Event.current;
+        if (e == null) return;
+
+        var panel = ClampToScreen(new Rect(
+            _panelPos.x, _panelPos.y, PanelRect.width, PanelRect.height));
+        var header = new Rect(panel.x, panel.y, panel.width, HeaderHeight);
+        var close = new Rect(header.xMax - 24f, header.y + 4f, 20f, HeaderHeight - 8f);
+        var mouse = e.mousePosition;
+
+        if (e.type == EventType.MouseDown && e.button == 0
+            && header.Contains(mouse) && !close.Contains(mouse))
+        {
+            _dragging = true;
+            _dragOffset = mouse - new Vector2(panel.x, panel.y);
+            e.Use();
+        }
+        else if (e.type == EventType.MouseDrag && _dragging)
+        {
+            var clamped = ClampToScreen(new Rect(
+                mouse.x - _dragOffset.x, mouse.y - _dragOffset.y,
+                PanelRect.width, PanelRect.height));
+            _panelPos = new Vector2(clamped.x, clamped.y);
+            e.Use();
+        }
+        else if (e.type == EventType.MouseUp)
+        {
+            _dragging = false;
+        }
     }
 
     /// <summary>
@@ -337,12 +396,16 @@ internal sealed class GfxBehaviour : MonoBehaviour
     }
 
     /// <summary>
-    /// The single open action (F10): show the overlay, block game UI input
-    /// behind it, and log one line. Log string is byte-identical to the
-    /// pinned <c>[GFXConf] overlay opened</c> format.
+    /// The single open action (F10): snap the panel back to its default
+    /// top-left position, show the overlay, block game UI input behind it,
+    /// and log one line. Log string is byte-identical to the pinned
+    /// <c>[GFXConf] overlay opened</c> format.
     /// </summary>
     private static void OpenOverlay()
     {
+        _panelPos = new Vector2(PanelRect.x, PanelRect.y); // snap back to default
+        _dragging = false;
+        _windowRect = new Rect(20f, 20f, 360f, 520f);
         _visible = true;
         BlockGameInput();
         GfxConfig.LogSource?.LogInfo("[GFXConf] overlay opened");
@@ -360,6 +423,7 @@ internal sealed class GfxBehaviour : MonoBehaviour
     private static void CloseOverlay()
     {
         _visible = false;
+        _dragging = false;
         RestoreGameInput();
         GfxConfig.LogSource?.LogInfo("[GFXConf] overlay closed");
     }
