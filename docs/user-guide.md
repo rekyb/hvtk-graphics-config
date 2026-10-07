@@ -33,7 +33,9 @@ BepInEx only ever adds new files, Steam Verify ignores extras).
 ## 3. In-game overlay (F10)
 
 Press **F10** in game to open the GFXConf overlay: every config key as a
-live control. Press **F10** again to close.
+live control. While it is open the overlay **blocks clicks to game UI
+behind it**; closing it restores normal game input. Press **F10** again to
+close.
 
 - **Settings toggles are LIVE.** Flipping any toggle writes the value to
   `gfxconf.cfg` immediately (saved to disk) **and** triggers an immediate
