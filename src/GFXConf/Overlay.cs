@@ -446,9 +446,13 @@ internal sealed class GfxBehaviour : MonoBehaviour
     /// <summary>
     /// Re-enables every EventSystem disabled by <see cref="BlockGameInput"/>
     /// and clears the list — called from <see cref="CloseOverlay"/> on every
-    /// close path (F10, the X button, draw failure). try/catch/finally: a
-    /// failing restore still warns once AND clears the list so the next open
-    /// starts clean; never rethrows.
+    /// close path (F10, the X button, draw failure). Each item gets its own
+    /// try/catch so ONE throwing interop wrapper warns and is skipped while
+    /// the remaining items are still re-enabled (a shared catch would abort
+    /// at the first bad item, orphaning the rest as permanently disabled →
+    /// game input loss until restart). Outer try/catch/finally: never
+    /// rethrows, and the list is always cleared so the next open starts
+    /// clean.
     /// </summary>
     private static void RestoreGameInput()
     {
@@ -456,7 +460,14 @@ internal sealed class GfxBehaviour : MonoBehaviour
         {
             foreach (var behaviour in _blockedEventSystems)
             {
-                if (behaviour != null) behaviour.enabled = true;
+                try
+                {
+                    if (behaviour != null) behaviour.enabled = true;
+                }
+                catch (Exception ex)
+                {
+                    GfxConfig.LogSource?.LogWarning($"[GFXConf] input restore failed: {ex}");
+                }
             }
         }
         catch (Exception ex)
