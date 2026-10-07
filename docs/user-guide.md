@@ -1,7 +1,7 @@
 # GFXConf — User Guide
 
 Config-driven low-effects plugin for *Heroes' Vow: Three Kingdoms*.
-Version **0.1.0** (plugin ID `com.rekyb.hvtk.gfxconf`, DLL `GFXConf.dll`).
+Version **0.2.0** (plugin ID `com.rekyb.hvtk.gfxconf`, DLL `GFXConf.dll`).
 
 GFXConf disables expensive visual effects at runtime. It **never modifies any
 game asset file** — everything it does lives in `BepInEx\` (plugin, config,
@@ -119,8 +119,8 @@ Filter for `GFXConf|Unhandled exception`. A **clean run** looks like this
 (pinned log line formats):
 
 ```
-[Info   :   BepInEx] Loading [GFXConf 0.1.0]
-[Info   :   GFXConf] [GFXConf] v0.1.0 loaded (com.rekyb.hvtk.gfxconf)
+[Info   :   BepInEx] Loading [GFXConf 0.2.0]
+[Info   :   GFXConf] [GFXConf] v0.2.0 loaded (com.rekyb.hvtk.gfxconf)
 [Info   :   GFXConf] [GFXConf] config: <game>\BepInEx\config\gfxconf.cfg
 [Info   :   GFXConf] [GFXConf] scene=StartMenu sweep in 2s
 [Info   :   GFXConf] [GFXConf] scene=StartMenu: AO=0, CA=0, DoF=0, SSR=0, MB=0, Bloom=0, SCPE.Fog=0, SCPE.CloudShadows=0, SCPE.AO2D=0, SCPE.Blur=0, SCPE.Sharpen=0, VolumetricFog=0, planar=0, aura=0, aa=0
@@ -128,7 +128,7 @@ Filter for `GFXConf|Unhandled exception`. A **clean run** looks like this
 
 What to look for:
 
-- `[GFXConf] v0.1.0 loaded ...` — plugin loaded (banner appears once).
+- `[GFXConf] v0.2.0 loaded ...` — plugin loaded (banner appears once).
 - `scene=<name> sweep in <n>s` — a sweep was scheduled (on startup, on each
   scene load, or from an overlay toggle).
 - **One** `scene=<name>: AO=...` summary line per completed sweep, ending in

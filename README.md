@@ -4,7 +4,7 @@ A lightweight BepInEx mod for Heroes' Vow: Three Kingdoms that trims heavy visua
 
 ## Status
 
-**Implemented — v0.1.0.** All spec deliverables built and test-verified; see
+**Implemented — v0.2.0.** All spec deliverables built and test-verified; see
 [`docs/superpowers/specs/`](docs/superpowers/specs/) for the approved design.
 
 **→ Setup, config reference, overlay usage and troubleshooting:

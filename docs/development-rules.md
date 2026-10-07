@@ -49,7 +49,7 @@ Derived from research on BepInEx modding best practices (sources at the end).
   |---|---|
   | GUID | `com.rekyb.hvtk.gfxconf` |
   | Name | `GFXConf` |
-  | Version | `0.1.0` |
+  | Version | `0.2.0` |
 
 ### 2.3 Logging
 - Use the plugin's `ManualLogSource` (goes to `BepInEx/LogOutput.log`), never
