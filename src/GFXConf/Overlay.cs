@@ -54,15 +54,26 @@ internal sealed class GfxBehaviour : MonoBehaviour
 
     /// <summary>
     /// Fixed panel geometry for the fallback path (position/size are fixed
-    /// per contract — content is laid out inside <see cref="BodyRect"/>).
+    /// per contract). Per draw it is clamped into the screen by
+    /// <see cref="ClampToScreen"/> so the panel never runs off-screen.
     /// </summary>
     private static readonly Rect PanelRect = new(16f, 16f, 360f, 620f);
 
-    /// <summary>Title strip drawn on top of the panel background.</summary>
-    private static readonly Rect HeaderRect = new(16f, 16f, 360f, 26f);
+    /// <summary>Title strip height — drawn on top of the panel background.</summary>
+    private const float HeaderHeight = 26f;
 
-    /// <summary>Where the shared GUILayout content is laid out in panel mode.</summary>
-    private static readonly Rect BodyRect = new(18f, 44f, 356f, 590f);
+    /// <summary>
+    /// Fixed footer height (F10 hint + word-wrapped last summary) reserved
+    /// at the panel bottom, OUTSIDE the scroll view, so both stay visible.
+    /// </summary>
+    private const float FooterHeight = 80f;
+
+    /// <summary>
+    /// Scroll position of the controls area. One field shared by both draw
+    /// paths (only one path renders per session — <see cref="_panelMode"/>
+    /// is sticky), so switching paths never loses the user's position.
+    /// </summary>
+    private static Vector2 _scroll;
 
     /// <summary>Bold section header style, created once on first draw.</summary>
     private static GUIStyle _sectionStyle;
@@ -157,8 +168,7 @@ internal sealed class GfxBehaviour : MonoBehaviour
             {
                 if (_visible)
                 {
-                    _visible = false;
-                    GfxConfig.LogSource?.LogInfo("[GFXConf] overlay closed");
+                    CloseOverlay();
                 }
                 else
                 {
@@ -225,26 +235,121 @@ internal sealed class GfxBehaviour : MonoBehaviour
     }
 
     /// <summary>
-    /// Fixed-panel fallback: window-style background box, the shared
-    /// GUILayout content in <see cref="BodyRect"/>, then the title strip.
-    /// Begin/EndArea is protected by finally so a throwing control can
-    /// never leave the global layout stack unbalanced (it would corrupt
-    /// every later GUILayout draw, including the game's own).
+    /// Fixed-panel fallback: opaque background box, the controls in a
+    /// scroll view (all 18 entries reachable at any resolution), a fixed
+    /// footer (F10 hint + last sweep summary, always visible), then the
+    /// title strip with the close X. Begin/EndArea and Begin/EndScrollView
+    /// are protected by finally so a throwing control can never leave the
+    /// global layout stack unbalanced (it would corrupt every later
+    /// GUILayout draw, including the game's own).
     /// </summary>
     private static void DrawPanel()
     {
-        GUI.Box(PanelRect, string.Empty, GUI.skin.window);
-        GUILayout.BeginArea(BodyRect);
+        var panel = ClampToScreen(PanelRect);
+        var header = new Rect(panel.x, panel.y, panel.width, HeaderHeight);
+        var footer = new Rect(
+            panel.x + 2f, panel.yMax - FooterHeight - 2f, panel.width - 4f, FooterHeight);
+        var scroll = new Rect(
+            panel.x + 2f, header.yMax + 2f, panel.width - 4f,
+            Mathf.Max(40f, footer.y - header.yMax - 6f));
+
+        FillOpaque(panel); // R2 round 4: solid, fully opaque dark background
+        GUI.Box(panel, string.Empty, GUI.skin.window);
+
+        GUILayout.BeginArea(scroll);
+        var next = _scroll;
         try
         {
-            DrawContent();
+            next = GUILayout.BeginScrollView(_scroll);
+            try
+            {
+                DrawControls();
+            }
+            finally
+            {
+                GUILayout.EndScrollView();
+            }
         }
         finally
         {
             GUILayout.EndArea();
         }
 
-        GUI.Box(HeaderRect, "GFXConf overlay", GUI.skin.box);
+        _scroll = next;
+
+        GUILayout.BeginArea(footer);
+        try
+        {
+            DrawFooter();
+        }
+        finally
+        {
+            GUILayout.EndArea();
+        }
+
+        GUI.Box(header, "GFXConf overlay", GUI.skin.box);
+        DrawCloseButton(header);
+    }
+
+    /// <summary>
+    /// Fills <paramref name="rect"/> with a solid opaque dark colour
+    /// (alpha 1) via the white texture tinted by <c>GUI.color</c> — the
+    /// skin-independent way to guarantee a fully opaque panel background.
+    /// <c>GUI.color</c> is always restored, even on a throw.
+    /// </summary>
+    private static void FillOpaque(Rect rect)
+    {
+        var previous = GUI.color;
+        try
+        {
+            GUI.color = new Color(0.09f, 0.10f, 0.12f, 1f);
+            GUI.DrawTexture(rect, Texture2D.whiteTexture);
+        }
+        finally
+        {
+            GUI.color = previous;
+        }
+    }
+
+    /// <summary>
+    /// Shrinks/shifts the nominal panel rect so it fits inside
+    /// <c>Screen.width/Height</c> (small resolutions never cut the panel
+    /// off); recomputed every draw so a resolution change applies live.
+    /// </summary>
+    private static Rect ClampToScreen(Rect rect)
+    {
+        rect.width = Mathf.Min(rect.width, Mathf.Max(80f, Screen.width - 8f));
+        rect.height = Mathf.Min(rect.height, Mathf.Max(80f, Screen.height - 8f));
+        rect.x = Mathf.Clamp(rect.x, 0f, Mathf.Max(0f, Screen.width - rect.width));
+        rect.y = Mathf.Clamp(rect.y, 0f, Mathf.Max(0f, Screen.height - rect.height));
+        return rect;
+    }
+
+    /// <summary>
+    /// Small close button at the top-right of the title row. Behaves
+    /// exactly like F10 close (same <see cref="CloseOverlay"/>): the
+    /// ruling T6 #1 gate covers OPENING only, and the X is only visible
+    /// while the overlay is already open, so no gate interaction exists.
+    /// </summary>
+    private static void DrawCloseButton(Rect titleRow)
+    {
+        var closeRect = new Rect(titleRow.xMax - 24f, titleRow.y + 4f, 20f, HeaderHeight - 8f);
+        if (GUI.Button(closeRect, "X"))
+        {
+            CloseOverlay();
+        }
+    }
+
+    /// <summary>
+    /// The single close action (F10 and the X button): hide the overlay
+    /// and log one line. Log string is byte-identical to the pinned
+    /// <c>[GFXConf] overlay closed</c> format. No gate check — closing an
+    /// open overlay is always allowed (ruling T6 #1).
+    /// </summary>
+    private static void CloseOverlay()
+    {
+        _visible = false;
+        GfxConfig.LogSource?.LogInfo("[GFXConf] overlay closed");
     }
 
     /// <summary>
@@ -252,13 +357,31 @@ internal sealed class GfxBehaviour : MonoBehaviour
     /// exception never reaches <c>OnGUI</c>'s catch (it is swallowed one
     /// frame deeper and logged by Il2CppInterop as an error), so the content
     /// guards itself: a failure warns once, switches to the panel path and
-    /// draws nothing for this event.
+    /// draws nothing for this event. Shares the panel path's presentation:
+    /// opaque background, close X, scrollable controls, fixed footer.
     /// </summary>
     private static void DrawWindow(int id)
     {
         try
         {
-            DrawContent();
+            FillOpaque(new Rect(0f, 0f, _windowRect.width, _windowRect.height));
+            var titleRow = new Rect(0f, 0f, _windowRect.width, HeaderHeight);
+            GUI.Label(new Rect(6f, 4f, _windowRect.width - 30f, HeaderHeight - 8f),
+                "GFXConf overlay");
+            DrawCloseButton(titleRow);
+
+            var next = GUILayout.BeginScrollView(_scroll);
+            try
+            {
+                DrawControls();
+            }
+            finally
+            {
+                GUILayout.EndScrollView();
+            }
+
+            _scroll = next;
+            DrawFooter();
         }
         catch (Exception ex)
         {
@@ -268,13 +391,14 @@ internal sealed class GfxBehaviour : MonoBehaviour
     }
 
     /// <summary>
-    /// Window content: all 18 §4.2 entries as live controls under their 5
-    /// section headers, then the F10 hint + last sweep summary. No
-    /// reflection — only the known <see cref="GfxConfig"/> entries are ever
-    /// listed. A null entry (Bind failed) draws a placeholder instead of
-    /// throwing. Used by both the GUILayout.Window and the panel path.
+    /// The scrollable controls: all 18 §4.2 entries as live controls under
+    /// their 5 section headers. No reflection — only the known
+    /// <see cref="GfxConfig"/> entries are ever listed. A null entry (Bind
+    /// failed) draws a placeholder instead of throwing. Used by both the
+    /// GUILayout.Window and the panel path; the footer lives outside the
+    /// scroll view (see <see cref="DrawFooter"/>).
     /// </summary>
-    private static void DrawContent()
+    private static void DrawControls()
     {
         if (_sectionStyle == null)
         {
@@ -309,7 +433,15 @@ internal sealed class GfxBehaviour : MonoBehaviour
         DrawToggle(GfxConfig.ReapplyOnSceneLoad);
         DrawDelaySeconds();
         DrawToggle(GfxConfig.EnableF10Overlay);
+    }
 
+    /// <summary>
+    /// Fixed footer (outside the scroll view so it stays visible at any
+    /// resolution): the F10 hint plus the last sweep summary, word-wrapped
+    /// to the available width. Used by both draw paths.
+    /// </summary>
+    private static void DrawFooter()
+    {
         GUILayout.Space(6f);
         GUILayout.Label("F10 = close");
         var summary = Sweeper.LastSummary;

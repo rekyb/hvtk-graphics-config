@@ -40,10 +40,16 @@ internal static class Sweeper
     private const string VolumetricFogType = "VolumetricFogAndMist.VolumetricFog";
     private const string PlanarReflectionType = "Ceto.PlanarReflection";
 
-    /// <summary>The three Aura2 types counted together under the `aura` label.</summary>
+    /// <summary>
+    /// The two Aura2 types counted together under the `aura` label.
+    /// <c>Aura2API.Aura</c> is deliberately NOT listed: runtime proved it is
+    /// a plain <c>Il2CppSystem.Object</c> (not a UnityEngine.Object), so
+    /// passing it to FindObjectsOfType makes Unity log
+    /// <c>FindAllObjectsOfType: The type has to be derived from
+    /// UnityEngine.Object. Type is Aura.</c> on every sweep.
+    /// </summary>
     private static readonly string[] AuraTypes =
     {
-        "Aura2API.Aura",
         "Aura2API.AuraVolume",
         "Aura2API.AuraCamera"
     };
@@ -352,7 +358,9 @@ internal static class Sweeper
                 // UnityEngine.Object may fail `is Behaviour` even when the
                 // native object IS one — re-wrap as the resolved type first.
                 // `as Behaviour` still enforces "only Behaviours are touched"
-                // (e.g. Aura2API.Aura is a plain il2cpp object, not one).
+                // (the requested type itself may be a plain il2cpp object —
+                // e.g. the excluded Aura2API.Aura — in which case the re-wrap
+                // yields null and nothing is touched).
                 var behaviour = obj as Behaviour
                     ?? (Activator.CreateInstance(type, obj.Pointer) as Behaviour);
                 if (behaviour == null)

@@ -108,6 +108,11 @@ The log is **`<game>\BepInEx\LogOutput.log`**, i.e.
 Close the game (or the BepInEx console) before copying it — it is locked
 while the game runs.
 
+Also check Unity's own player log:
+`C:\Users\<you>\AppData\LocalLow\FreeWing\ThreeKingdom\Player.log`.
+Unity **engine** errors (e.g. `FindAllObjectsOfType`) appear THERE, not in
+`BepInEx\LogOutput.log` — a clean session should show none of them.
+
 Filter for `GFXConf|Unhandled exception`. A **clean run** looks like this
 (pinned log line formats):
 
@@ -149,3 +154,9 @@ running, one summary still follows):
 If a sweep itself fails you get exactly one
 `sweep failed (scene=...)` / `settings sweep failed (...)` warning instead of
 a crash — the plugin catches every group separately and never rethrows.
+
+**Heavy scenes are baseline performance, not config-fixable:** a heavy scene
+(e.g. farmland) can run at ~4–5 FPS **with or without** the plugin (verified
+by A/B). The effect toggles don't remove scene geometry/foliage cost — that
+is the game's baseline performance in that scene, not something the config
+can change.
