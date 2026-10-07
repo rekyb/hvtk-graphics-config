@@ -110,6 +110,16 @@ internal static class Sweeper
     {
         try
         {
+            // Crash-safety test hook (spec test 7): MUST stay false in
+            // committed code (kept as dead code by design). When true, the
+            // deliberate throw below is caught by the outer catch → one
+            // warning, never an unhandled crash.
+            const bool ForceTestException = false;
+            if (ForceTestException)
+            {
+                throw new InvalidOperationException("[GFXConf] forced test exception");
+            }
+
             // Per-label counts for THIS sweep (11 settings + 4 component/AA).
             var counts = new Dictionary<string, int>
             {
