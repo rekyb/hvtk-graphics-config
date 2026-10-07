@@ -252,7 +252,7 @@ internal sealed class GfxBehaviour : MonoBehaviour
         }
         catch (Exception ex)
         {
-            CloseOverlay(); // restores game input before hiding
+            CloseOverlay(); // hides first, then restores game input
             GfxConfig.LogSource?.LogWarning($"[GFXConf] overlay draw failed: {ex}");
         }
     }
@@ -309,7 +309,8 @@ internal sealed class GfxBehaviour : MonoBehaviour
     /// (outside the close-X rect, so clicking X still closes instead of
     /// starting a drag) latches a grab with the grab offset; MouseDrag
     /// moves <see cref="_panelPos"/>, clamped to the screen every event so
-    /// the panel can never be dragged off-screen; MouseUp releases. Runs
+    /// the panel can never be dragged off-screen; left-button MouseUp
+    /// releases. Runs
     /// only on IMGUI mouse events — no per-frame allocations. Called at the
     /// top of <see cref="DrawPanel"/> before the geometry is computed, so
     /// the drag and the drawn panel always agree on the position.
@@ -340,7 +341,7 @@ internal sealed class GfxBehaviour : MonoBehaviour
             _panelPos = new Vector2(clamped.x, clamped.y);
             e.Use();
         }
-        else if (e.type == EventType.MouseUp)
+        else if (e.type == EventType.MouseUp && e.button == 0)
         {
             _dragging = false;
         }
@@ -433,8 +434,11 @@ internal sealed class GfxBehaviour : MonoBehaviour
     /// loaded assemblies at most ONCE per session (hit and miss are both
     /// cached), logging exactly one
     /// <c>[GFXConf] type not found: UnityEngine.EventSystems.EventSystem</c>
-    /// warning when the type is absent. Never throws — an unreadable
-    /// assembly produces one warning and is skipped.
+    /// warning when the type is absent. Per-assembly lookups never throw —
+    /// an unreadable assembly produces one warning and is skipped. The
+    /// assembly enumeration itself (<c>AppDomain.CurrentDomain.GetAssemblies()</c>)
+    /// is NOT guarded here: the caller (<see cref="BlockGameInput"/>) must
+    /// wrap this method in try/catch, which it does.
     /// </summary>
     private static Type ResolveEventSystemType()
     {
@@ -497,9 +501,17 @@ internal sealed class GfxBehaviour : MonoBehaviour
                 var behaviour = obj as Behaviour
                     ?? (Activator.CreateInstance(type, obj.Pointer) as Behaviour);
                 if (behaviour == null) continue;
-                behaviour.enabled = false;
+                // Track BEFORE disabling: if Add throws, nothing was
+                // disabled; if the disable throws, restore's enabled=true
+                // on the tracked item is a harmless no-op.
                 _blockedEventSystems.Add(behaviour);
+                behaviour.enabled = false;
             }
+
+            // One transition-only line (never per frame) so the log shows
+            // how many EventSystems the open blocked.
+            GfxConfig.LogSource?.LogInfo(
+                $"[GFXConf] input blocked: {_blockedEventSystems.Count} EventSystem(s)");
         }
         catch (Exception ex)
         {
@@ -766,6 +778,25 @@ internal sealed class GfxBehaviour : MonoBehaviour
 
     private void OnDestroy()
     {
+        // Teardown while open would otherwise strand the overlay visible
+        // with the game's EventSystems disabled (no Update/OnGUI remains to
+        // recover until the next sceneLoaded → EnsureCreated), leaving game
+        // UI input dead — so run the full close path first (hide, restore
+        // input, log "overlay closed"). Guarded: this is the first code in
+        // OnDestroy that can throw; a failure must never escape into the
+        // Unity teardown callback.
+        try
+        {
+            if (_visible)
+            {
+                CloseOverlay();
+            }
+        }
+        catch (Exception ex)
+        {
+            GfxConfig.LogSource?.LogWarning($"[GFXConf] teardown close failed: {ex}");
+        }
+
         // Self-heal: the game destroys pump objects created during the
         // boot-time scene transition (verified in testing — the object sat in
         // the DontDestroyOnLoad scene and was still torn down). Clearing the

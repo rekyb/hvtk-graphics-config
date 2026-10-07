@@ -137,6 +137,9 @@ What to look for:
 - **Zero** `Unhandled exception` lines. If the game misbehaves and you see
   none of the `[GFXConf]` lines at all, the plugin isn't loading — check that
   `GFXConf.dll` is in `BepInEx\plugins\`.
+- `[Info   :   GFXConf] [GFXConf] input blocked: <n> EventSystem(s)` — logged
+  once each time the overlay opens: the <n> game EventSystems disabled while
+  it is open (closing restores them, logged as `overlay closed`).
 
 Known benign lines (not errors):
 
