@@ -29,13 +29,14 @@ and is not treated as a clean performance benchmark.
 - A frozen 3D snapshot behind live screen-space UI.
 - Automatic apply, refresh, and restore as additive scenes load and unload.
 - A configurable manual capture hotkey that adds a scene to the allowlist.
-- Built-in vetoes for battle, war, duel, and debate scenes.
+- Allowlist-only scene matching; the veto set starts empty.
 
 ### Out of scope
 
 - Modifying or replacing game assets.
 - FPS/frametime logging in the released plugin.
-- Suppressing interactive battle, war, duel, or debate scenes.
+- Adding interactive battle, war, duel, or debate scenes to the default
+  allowlist.
 - Pausing `Time.timeScale` as a substitute for reducing render submission.
 - Modifying or disabling the game's `EventSystem`.
 - Harmony patches.
@@ -58,13 +59,12 @@ CaptureSceneHotkey = F9
 - The parser trims whitespace, ignores empty items, and compares scene names
   case-insensitively. Duplicate entries are treated as one entry.
 - `CaptureSceneHotkey` is a configurable Unity key, default `F9`.
-- Pressing the capture hotkey appends the most recently loaded non-veto scene
+- Pressing the capture hotkey appends the most recently loaded scene
   to the allowlist and saves `gfxconf.cfg`. It does not add duplicates. A
   successful addition is applied immediately if the current loaded set is
   eligible.
-- If any veto scene is currently loaded, manual capture is refused. The
-  operation reports a concise reason in the BepInEx log and leaves config
-  unchanged.
+- Use F9 only in a scene confirmed safe to suppress. Adding a scene makes it
+  eligible immediately if it is currently loaded.
 
 ## 4. Scene eligibility and vetoes
 
@@ -74,21 +74,15 @@ instances can be removed correctly. Track the most recently loaded scene from
 `sceneLoaded` for the capture hotkey. Do not use
 `SceneManager.GetActiveScene()` as the match source or capture target.
 
-Suppression is eligible exactly when:
+Suppression is eligible exactly when at least one loaded scene name matches
+`SceneSuppressionAllowlist`. The veto set is empty initially; do not add a
+scene veto unless the user later identifies that interactive scene.
 
-1. At least one loaded scene name matches `SceneSuppressionAllowlist`; and
-2. No loaded scene name matches the built-in veto set.
-
-The built-in veto categories are battle, war, duel, and debate. Vetoes take
-precedence if a veto scene is loaded additively alongside an allowlisted scene.
-The veto set is code-owned and is not exposed as a user-editable config list.
-
-Veto identifiers must be exact runtime scene names confirmed by the probe's
-`SCENE LOADED ... loaded set ...` log. Do not infer the runtime name or scene
-category from an asset filename. Locked or not-yet-observed scene identifiers
-are added to the built-in veto set as they are encountered. Until an identifier
-is confirmed and added, protection for that unseen scene cannot be guaranteed;
-the manual capture hotkey must only be used in a confirmed idle scene.
+If the user later reports an interactive scene that must be protected, add its
+exact runtime name to a code-owned veto set using the probe's
+`SCENE LOADED ... loaded set ...` log. Do not infer runtime names from asset
+filenames. Until such a veto is added, an interactive scene loaded alongside
+an allowlisted scene will also have its 3D suppressed. This is a known risk.
 
 The known safe defaults are `SS_Farmland`, `SS_City_Market`, and
 `SS_City_Street`. The observed additive helper/parent scenes are not added to
@@ -124,9 +118,9 @@ image. No game input system is modified.
 - If the set of loaded allowlisted scenes changes while still eligible,
   restore rendering for the capture frame, refresh the image, then suppress
   rendering again.
-- If a veto scene loads or no allowlisted scene remains, restore each saved
-  camera mask and post-processing enabled state, then destroy the snapshot
-  texture and display object.
+- If no allowlisted scene remains, restore each saved camera mask and
+  post-processing enabled state, then destroy the snapshot texture and display
+  object.
 - Camera references are not retained across scene-set changes after restore.
 - Scene suppression does not depend on `ReapplyOnSceneLoad` or `DelaySeconds`;
   it follows the loaded-scene eligibility rule directly.
@@ -150,7 +144,7 @@ Logs must make it possible to verify:
 
 - Which target scene made suppression eligible.
 - How many cameras and post-processing layers were changed.
-- When suppression was restored and why (target left, veto loaded, or failure).
+- When suppression was restored and why (target left or failure).
 - Which exact scene the capture hotkey added, or why capture was skipped.
 - Whether snapshot capture failed and normal rendering was retained.
 
@@ -181,9 +175,9 @@ No game DLLs, game assets, or NuGet dependencies are added or modified.
    and `CaptureSceneHotkey = F9`; an empty allowlist touches no rendering state.
 3. **Loaded-set matching:** farmland, market, and town match by loaded scene
    name even when the active scene is the shared parent.
-4. **Veto precedence:** load a confirmed veto scene additively with a target;
-   suppression stays/restores off. Verify all four categories as their exact
-   runtime scene names become available.
+4. **Allowlist-only matching:** an allowlisted scene triggers suppression even
+   when an unlisted scene is also loaded. A veto scene is not recognized until
+   the user reports its exact runtime name and a code-owned veto is added.
 5. **Snapshot/UI:** snapshot shows the last 3D view; screen-space progress,
    buttons, and popups remain live and responsive; no `EventSystem` changes or
    input-block logs occur.
@@ -191,9 +185,9 @@ No game DLLs, game assets, or NuGet dependencies are added or modified.
    refreshes the snapshot. Leaving the target set or loading a veto restores
    the exact prior camera masks and post-processing states and releases the
    snapshot resources.
-7. **Manual capture:** F9 appends only the latest non-veto loaded scene,
-   persists it, does not duplicate it, and applies immediately when eligible.
-   With a veto loaded, F9 changes neither config nor rendering state.
+7. **Manual capture:** F9 appends the latest loaded scene, persists it, does
+   not duplicate it, and applies immediately when eligible. The user must
+   only use F9 in a scene confirmed safe to suppress.
 8. **Fail-open:** force snapshot capture/setup failure; verify normal 3D
    rendering remains or is restored and the game continues without an
    unhandled exception.
@@ -206,9 +200,9 @@ No game DLLs, game assets, or NuGet dependencies are added or modified.
 
 ## 9. Known limits
 
-- Exact veto scene identifiers for locked or unvisited scenes are not yet
-  confirmed. Add each identifier from runtime logs as the user encounters that
-  category; do not claim unseen identifiers are protected.
+- The veto set is initially empty. Until the user identifies an interactive
+  scene and its exact runtime name is added as a veto, allowlisting another
+  loaded scene can suppress it too.
 - F9 is configurable in case it conflicts with another game binding.
 - A one-frame screen-space UI blink can occur when a snapshot is captured or
   refreshed.
