@@ -165,4 +165,23 @@ internal static class GfxConfig
 
         return scenes;
     }
+
+    internal static bool IsSceneSuppressionEligible(IEnumerable<string> loadedSceneNames, string allowlistValue)
+    {
+        if (loadedSceneNames == null)
+        {
+            return false;
+        }
+
+        var allowed = new HashSet<string>(ParseSceneSuppressionAllowlist(allowlistValue), StringComparer.OrdinalIgnoreCase);
+        foreach (var sceneName in loadedSceneNames)
+        {
+            if (!string.IsNullOrWhiteSpace(sceneName) && allowed.Contains(sceneName.Trim()))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
 }
