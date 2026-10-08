@@ -33,10 +33,10 @@ BepInEx only ever adds new files, Steam Verify ignores extras).
 ## 3. In-game overlay (F10)
 
 Press **F10** in game to open the GFXConf overlay: every config key as a
-live control. While it is open the overlay **blocks clicks to game UI
-behind it**; closing it restores normal game input. Press **F10** again to
-close. The overlay can be **dragged by its title bar**; it snaps back to
-the top-left corner every time it is reopened.
+live control. The overlay does not block game input, so clicks may reach
+game UI behind it. Press **F10** again to close. The overlay can be
+**dragged by its title bar**; it snaps back to the top-left corner every
+time it is reopened.
 
 - **Settings toggles are LIVE.** Flipping any toggle writes the value to
   `gfxconf.cfg` immediately (saved to disk) **and** triggers an immediate
@@ -137,10 +137,6 @@ What to look for:
 - **Zero** `Unhandled exception` lines. If the game misbehaves and you see
   none of the `[GFXConf]` lines at all, the plugin isn't loading — check that
   `GFXConf.dll` is in `BepInEx\plugins\`.
-- `[Info   :   GFXConf] [GFXConf] input blocked: <n> EventSystem(s)` — logged
-  once each time the overlay opens: the <n> game EventSystems disabled while
-  it is open (closing restores them, logged as `overlay closed`).
-
 Known benign lines (not errors):
 
 - `[Warning:   GFXConf] [GFXConf] GUILayout.Window unavailable — overlay uses fixed

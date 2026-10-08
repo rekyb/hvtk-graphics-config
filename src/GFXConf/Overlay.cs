@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using BepInEx.Configuration;
 using UnityEngine;
 
@@ -52,23 +51,6 @@ internal sealed class GfxBehaviour : MonoBehaviour
     /// a persistent failure must not warn every frame (rules §2.3).
     /// </summary>
     private static bool _f10Broken;
-
-    /// <summary>
-    /// Game <c>EventSystem</c> wrappers disabled while the overlay is open
-    /// (IMGUI does not consume uGUI clicks, so the overlay must block the
-    /// game's own input). Re-enabled and cleared by
-    /// <see cref="RestoreGameInput"/> on EVERY close path.
-    /// </summary>
-    private static readonly List<Behaviour> _blockedEventSystems = new();
-
-    /// <summary>Cached <c>UnityEngine.EventSystems.EventSystem</c> type.</summary>
-    private static Type _eventSystemType;
-
-    /// <summary>
-    /// Resolved-once flag for <see cref="_eventSystemType"/>: both hits and
-    /// misses are cached so the assembly scan runs at most once per session.
-    /// </summary>
-    private static bool _eventSystemTypeResolved;
 
     /// <summary>
     /// Default panel geometry for the fallback path (size is fixed per
@@ -398,8 +380,8 @@ internal sealed class GfxBehaviour : MonoBehaviour
 
     /// <summary>
     /// The single open action (F10): snap the panel back to its default
-    /// top-left position, show the overlay, block game UI input behind it,
-    /// and log one line. Log string is byte-identical to the pinned
+    /// top-left position, show the overlay, and log one line. Log string is
+    /// byte-identical to the pinned
     /// <c>[GFXConf] overlay opened</c> format.
     /// </summary>
     private static void OpenOverlay()
@@ -408,152 +390,22 @@ internal sealed class GfxBehaviour : MonoBehaviour
         _dragging = false;
         _windowRect = new Rect(20f, 20f, 360f, 520f);
         _visible = true;
-        BlockGameInput();
         GfxConfig.LogSource?.LogInfo("[GFXConf] overlay opened");
     }
 
     /// <summary>
     /// The single close action (F10, the X button and the OnGUI failure
-    /// path): hide the overlay, restore game input, and log one line. Log
-    /// string is byte-identical to the pinned <c>[GFXConf] overlay closed</c>
-    /// format. No gate check — closing an open overlay is always allowed
-    /// (ruling T6 #1). Every visibility transition goes through
-    /// <see cref="OpenOverlay"/>/<see cref="CloseOverlay"/> so the game's
-    /// EventSystem can never be left disabled.
+    /// path): hide the overlay and log one line. Log string is byte-identical
+    /// to the pinned <c>[GFXConf] overlay closed</c> format. No gate check —
+    /// closing an open overlay is always allowed (ruling T6 #1). Every
+    /// visibility transition goes through <see cref="OpenOverlay"/> and
+    /// <see cref="CloseOverlay"/>.
     /// </summary>
     private static void CloseOverlay()
     {
         _visible = false;
         _dragging = false;
-        RestoreGameInput();
         GfxConfig.LogSource?.LogInfo("[GFXConf] overlay closed");
-    }
-
-    /// <summary>
-    /// Resolves <c>UnityEngine.EventSystems.EventSystem</c> across the
-    /// loaded assemblies at most ONCE per session (hit and miss are both
-    /// cached), logging exactly one
-    /// <c>[GFXConf] type not found: UnityEngine.EventSystems.EventSystem</c>
-    /// warning when the type is absent. Per-assembly lookups never throw —
-    /// an unreadable assembly produces one warning and is skipped. The
-    /// assembly enumeration itself (<c>AppDomain.CurrentDomain.GetAssemblies()</c>)
-    /// is NOT guarded here: the caller (<see cref="BlockGameInput"/>) must
-    /// wrap this method in try/catch, which it does.
-    /// </summary>
-    private static Type ResolveEventSystemType()
-    {
-        if (_eventSystemTypeResolved)
-        {
-            return _eventSystemType; // hit OR cached miss (null) — never re-scan
-        }
-
-        const string fullName = "UnityEngine.EventSystems.EventSystem";
-        Type resolved = null;
-        foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
-        {
-            try
-            {
-                resolved = assembly.GetType(fullName);
-            }
-            catch (Exception ex)
-            {
-                GfxConfig.LogSource?.LogWarning($"[GFXConf] type lookup scan failed ({fullName}): {ex.Message}");
-                continue;
-            }
-
-            if (resolved != null)
-            {
-                break;
-            }
-        }
-
-        _eventSystemType = resolved;
-        _eventSystemTypeResolved = true; // cache the miss too
-        if (resolved == null)
-        {
-            GfxConfig.LogSource?.LogWarning($"[GFXConf] type not found: {fullName}");
-        }
-
-        return _eventSystemType;
-    }
-
-    /// <summary>
-    /// Called once per overlay open (never per frame): finds every live
-    /// game <c>EventSystem</c> and forces <c>enabled = false</c> so clicks
-    /// land on nothing behind the IMGUI overlay. Uses the same non-generic
-    /// <c>FindObjectsOfType(type)</c> + interop re-wrap pattern as
-    /// <c>Sweep.DisableComponents</c> (Il2CppInterop pools wrappers as the
-    /// static requested type, so the plain cast may fail). Wrapped in
-    /// try/catch → one <c>LogWarning</c>, never rethrows.
-    /// </summary>
-    private static void BlockGameInput()
-    {
-        try
-        {
-            var type = ResolveEventSystemType();
-            if (type == null) return;
-            var found = UnityEngine.Object.FindObjectsOfType(
-                Il2CppInterop.Runtime.Il2CppType.From(type));
-            if (found == null) return;
-            foreach (var obj in found)
-            {
-                if (obj == null) continue;
-                var behaviour = obj as Behaviour
-                    ?? (Activator.CreateInstance(type, obj.Pointer) as Behaviour);
-                if (behaviour == null) continue;
-                // Track BEFORE disabling: if Add throws, nothing was
-                // disabled; if the disable throws, restore's enabled=true
-                // on the tracked item is a harmless no-op.
-                _blockedEventSystems.Add(behaviour);
-                behaviour.enabled = false;
-            }
-
-            // One transition-only line (never per frame) so the log shows
-            // how many EventSystems the open blocked.
-            GfxConfig.LogSource?.LogInfo(
-                $"[GFXConf] input blocked: {_blockedEventSystems.Count} EventSystem(s)");
-        }
-        catch (Exception ex)
-        {
-            GfxConfig.LogSource?.LogWarning($"[GFXConf] input block failed: {ex}");
-        }
-    }
-
-    /// <summary>
-    /// Re-enables every EventSystem disabled by <see cref="BlockGameInput"/>
-    /// and clears the list — called from <see cref="CloseOverlay"/> on every
-    /// close path (F10, the X button, draw failure). Each item gets its own
-    /// try/catch so ONE throwing interop wrapper warns and is skipped while
-    /// the remaining items are still re-enabled (a shared catch would abort
-    /// at the first bad item, orphaning the rest as permanently disabled →
-    /// game input loss until restart). Outer try/catch/finally: never
-    /// rethrows, and the list is always cleared so the next open starts
-    /// clean.
-    /// </summary>
-    private static void RestoreGameInput()
-    {
-        try
-        {
-            foreach (var behaviour in _blockedEventSystems)
-            {
-                try
-                {
-                    if (behaviour != null) behaviour.enabled = true;
-                }
-                catch (Exception ex)
-                {
-                    GfxConfig.LogSource?.LogWarning($"[GFXConf] input restore failed: {ex}");
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            GfxConfig.LogSource?.LogWarning($"[GFXConf] input restore failed: {ex}");
-        }
-        finally
-        {
-            _blockedEventSystems.Clear();
-        }
     }
 
     /// <summary>
@@ -778,13 +630,9 @@ internal sealed class GfxBehaviour : MonoBehaviour
 
     private void OnDestroy()
     {
-        // Teardown while open would otherwise strand the overlay visible
-        // with the game's EventSystems disabled (no Update/OnGUI remains to
-        // recover until the next sceneLoaded → EnsureCreated), leaving game
-        // UI input dead — so run the full close path first (hide, restore
-        // input, log "overlay closed"). Guarded: this is the first code in
-        // OnDestroy that can throw; a failure must never escape into the
-        // Unity teardown callback.
+        // Teardown while open should log the normal close transition before
+        // the next sceneLoaded → EnsureCreated. Guarded: a failure must never
+        // escape into the Unity teardown callback.
         try
         {
             if (_visible)

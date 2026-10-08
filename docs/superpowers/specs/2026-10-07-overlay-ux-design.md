@@ -1,7 +1,7 @@
 # GFXConf Overlay UX Improvements — Design
 
 Date: 2026-10-07
-Status: approved by user 2026-10-07 (implementation may proceed)
+Status: approved 2026-10-07; amended 2026-10-08 after runtime testing
 Scope path: bounded UI change to the existing F10 overlay (`Overlay.cs`)
 Branch: `feat/overlay-ux`
 
@@ -9,6 +9,11 @@ Follows the base design in
 `docs/superpowers/specs/2026-10-07-gfxconf-design.md`; this document only
 covers the overlay UX changes. Nothing here alters the config schema
 (`gfxconf.cfg` §4.2 of the base spec) or the sweep behavior.
+
+**2026-10-08 amendment:** Runtime testing showed that disabling the game's
+input system while the overlay was open caused repeated
+`NullReferenceException`s. That behavior and its restore path have been
+removed; game input is now left untouched while the overlay is visible.
 
 ## 1. Goal
 
@@ -26,7 +31,8 @@ changing what the plugin disables:
    only state indicator.
 5. `OverrideMode` and `DelaySeconds` **keep showing their values** — unlike
    a checkbox they have no other on-screen indicator.
-6. **Clicks no longer pass through** the overlay to game UI behind it.
+6. Game input is left untouched while the overlay is open; clicks may reach
+   game UI behind it.
 
 ## 2. Current behavior (context)
 
@@ -44,9 +50,9 @@ changing what the plugin disables:
 - `DrawFooter` renders the `F10 = close` hint and `Sweeper.LastSummary`
   inside a fixed `FooterHeight` (80 px) strip.
 - `DrawToggle` labels each row `"{key} = {value}"`.
-- Click-through: the game ships `UnityEngine.UI.dll` with the
-  `UnityEngine.EventSystems` namespace (uGUI). IMGUI drawing does not block
-  the uGUI `EventSystem`, so clicks on the overlay also hit game buttons.
+- The IMGUI panel does not block game input, so clicks may reach game UI
+  behind it. The overlay must not disable or otherwise modify game input
+  systems.
 
 ## 3. Scope
 
@@ -55,7 +61,9 @@ changing what the plugin disables:
 - Snap-back to default on every open.
 - Footer removal (hint + summary).
 - Toggle label = key only.
-- Disable the game `EventSystem` while the overlay is open; restore on close.
+- Leave game input systems enabled while the overlay is open. Click-through
+  prevention is deferred until a safe approach is separately designed and
+  tested.
 - Removal of the now-unused `Sweeper.LastSummary`.
 
 ### Out of scope (explicitly dropped)
@@ -63,6 +71,7 @@ changing what the plugin disables:
 - Persisting overlay position across sessions (no new config key).
 - Resize handle, drag grip, panel-size changes.
 - Any change to the sweep, the config schema, or the log line formats.
+- A modal input shield or any other click-through prevention mechanism.
 
 ## 4. Design
 
@@ -90,7 +99,7 @@ changing what the plugin disables:
 ### 4.2 Snap-back on open
 
 - The open path resets `_panelPos = new Vector2(PanelRect.x, PanelRect.y)`
-  and `_dragging = false`. Opening is centralized (see §4.4), so F10 and
+  and `_dragging = false`. Opening is centralized in `OpenOverlay()`, so F10 and
   any future open path get the same reset.
 - Position is never written to config; restarting the game also starts at
   the default.
@@ -104,28 +113,16 @@ changing what the plugin disables:
   still shows the value. `DrawOverrideMode` and `DrawDelaySeconds` are
   unchanged (they keep `OverrideMode = <value>` / `DelaySeconds = <n>`).
 
-### 4.4 Click-through prevention
+### 4.4 Input behavior
 
-- Resolve `UnityEngine.EventSystems.EventSystem` by name across loaded
-  assemblies (defensive, cached — same pattern as `Sweeper.ResolveType`).
-  Missing type → one `[GFXConf] type not found: ...` warning, then skip.
-- On open: `Object.FindObjectsOfType(Il2CppType.From(type))`, re-wrap each
-  result as a `Behaviour` (interop wrapper-cast caveat, as in
-  `Sweep.DisableComponents`), set `enabled = false`, and keep a strong
-  reference in a static list.
-- On close: set each referenced `Behaviour.enabled = true` and clear the
-  list.
-- Centralize visibility transitions into two helpers — `OpenOverlay()` and
-  `CloseOverlay()` — so **every** path restores game input:
-  - F10 opens → `OpenOverlay()`: `_visible = true`, reset position/drag
-    state (§4.2), block input (§4.4), log `[GFXConf] overlay opened`.
-  - F10 closes, the X button, and the `OnGUI` draw‑failure catch all call
-    `CloseOverlay()`: `_visible = false`, unblock input, log
-    `[GFXConf] overlay closed`. (The draw‑failure path additionally logs
-    its own warning, as today.)
-- Trade-off (accepted): while the overlay is open the game's UI cannot be
-  clicked at all; this is the intended modal behavior for a settings panel,
-  and the overlay's own IMGUI controls are unaffected.
+- Do not look up, disable, or otherwise mutate game input systems when
+  opening or closing the overlay. Runtime testing showed disabling the
+  game's input system caused repeated `NullReferenceException`s while the
+  overlay was open; the errors stopped when it closed.
+- Game input remains active while the overlay is visible. Clicks may reach
+  game UI behind the panel; this is accepted for now in favor of stability.
+- Any future click-through prevention must use a separately designed and
+  tested approach that leaves the game's input system enabled.
 
 ### 4.5 Cleanup
 
@@ -135,20 +132,16 @@ changing what the plugin disables:
 
 ## 5. Error handling
 
-- Every game-state touch (EventSystem type lookup, disable, restore) runs
-  in its own try/catch → `LogWarning`, never rethrow (project rule 2).
-- Failures latch to at most one warning per session for the type lookup,
-  matching the existing "log once" convention; no per-frame warnings.
-- If the EventSystem type is absent or no EventSystems exist, the overlay
-  still opens and closes normally.
+- Overlay drawing failures are caught and close the overlay without changing
+  game input state.
 
 ## 6. Files touched
 
 | File | Change |
 |---|---|
-| `src/GFXConf/Overlay.cs` | Drag state + handling, snap-back, footer removal, `DrawToggle` label, `OpenOverlay`/`CloseOverlay`, EventSystem block/restore, remove `DrawFooter`/`FooterHeight`/`_wrapStyle` |
+| `src/GFXConf/Overlay.cs` | Drag state + handling, snap-back, footer removal, `DrawToggle` label, `OpenOverlay`/`CloseOverlay`; remove EventSystem input blocking and restore code |
 | `src/GFXConf/Sweep.cs` | Remove unused `LastSummary` |
-| `docs/user-guide.md` | Update §3 overlay description (draggable, no footer, no click-through, snap-back) |
+| `docs/user-guide.md` | Update §3 overlay description (draggable, no footer, click-through possible, snap-back) |
 | `docs/superpowers/specs/2026-10-07-overlay-ux-design.md` | This spec |
 
 No change to `gfxconf.cfg` keys, defaults, or log line formats that the
@@ -164,20 +157,20 @@ user guide documents as pinned.
    default top-left; the close X still closes without dragging.
 4. **Footer/labels:** no footer or sweep summary is drawn; each toggle row
    shows only its key name; `OverrideMode`/`DelaySeconds` still show values.
-5. **Click-through:** with the overlay open, a game button behind the panel
-   does **not** activate; after closing, game buttons work again.
+5. **Input behavior:** game input remains enabled while the overlay is open;
+   clicks may reach game UI behind the panel. No input-block/restore messages
+   are logged.
 6. **Log triage:** `LogOutput.log` shows the banner, `overlay opened` /
    `overlay closed`, and **no** `Unhandled exception` and no `LogError`
    from GFXConf.
-7. **Crash safety:** with the EventSystem type forced missing (or no
-   EventSystem present), the overlay still opens/closes and logs one
-   warning — the game keeps running.
+7. **Crash safety:** open and close the overlay repeatedly; verify no NREs
+   occur from overlay input handling and the game keeps running.
 
 ## 8. Acceptance criteria
 
 - The overlay is draggable by the title bar and snaps to the default
   top-left position on every open; restarting also starts at default.
 - No footer and no trailing `= true/false` copy appear.
-- Clicking through the overlay to game UI is prevented while it is open
-  and game input is restored on close.
+- Game input systems are not modified while the overlay is open; click-through
+  may occur.
 - No config schema change; no new crash surface; `LogOutput.log` is clean.
