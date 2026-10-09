@@ -6,7 +6,7 @@
     <GameDir>C:\Program Files (x86)\Steam\steamapps\common\LegendOfHeros</GameDir>
     <AssemblyName>GFXConf</AssemblyName>
     <RootNamespace>GFXConf</RootNamespace>
-    <Version>0.4.0</Version>
+    <Version>0.4.1</Version>
   </PropertyGroup>
 
   <ItemGroup>
