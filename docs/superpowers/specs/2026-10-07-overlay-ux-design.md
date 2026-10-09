@@ -15,6 +15,11 @@ input system while the overlay was open caused repeated
 `NullReferenceException`s. That behavior and its restore path have been
 removed; game input is now left untouched while the overlay is visible.
 
+**2026-10-10 amendment:** The `Disable*` toggle rows are presented with
+positive polarity — labelled `Enable <effect>` with the checkbox showing the
+*enabled* state. Display-only: the config keys, defaults and cfg contents are
+unchanged.
+
 ## 1. Goal
 
 Make the in-game F10 overlay easier and less confusing to use, without
@@ -26,9 +31,10 @@ changing what the plugin disables:
 3. The **footer is removed** — neither the `F10 = close` hint nor the
    last-sweep summary is shown. Sweep detail remains available in
    `BepInEx\LogOutput.log` and the BepInEx console.
-4. Toggle rows show the **config key only** (e.g. `DisableAmbientOcclusion`);
-   the trailing `= true`/`= false` copy is removed. The checkbox is the
-   only state indicator.
+4. Toggle rows use sentence-style labels naming the effect, phrased
+   positively — a `DisableAmbientOcclusion` key reads **Enable Ambient
+   Occlusion**, and its checkbox shows the *enabled* state (checked = effect
+   on). The stored key, default and cfg contents are unchanged.
 5. `OverrideMode` and `DelaySeconds` **keep showing their values** — unlike
    a checkbox they have no other on-screen indicator.
 6. Game input is left untouched while the overlay is open; clicks may reach
@@ -109,9 +115,11 @@ changing what the plugin disables:
 - Remove the footer rect, `DrawFooter`, `FooterHeight`, and `_wrapStyle`
   from both draw paths. The scroll area extends into the space the footer
   occupied; the panel keeps its `360x620` default size (minimal change).
-- `DrawToggle` label becomes `entry.Definition.Key` only; the checkbox
-  still shows the value. `DrawOverrideMode` and `DrawDelaySeconds` are
-  unchanged (they keep `OverrideMode = <value>` / `DelaySeconds = <n>`).
+- `DrawToggle` labels come from `Label()`; for a `Disable*` entry the label is
+  the positive copy ("Enable Ambient Occlusion") and the checkbox mirrors the
+  enabled state — the entry still stores the `Disable*` boolean, the box just
+  inverts it for display. The string-valued rows (`OverrideMode`, `[Quality]`)
+  are cycle buttons showing `Label(key) = <option label>`.
 
 ### 4.4 Input behavior
 

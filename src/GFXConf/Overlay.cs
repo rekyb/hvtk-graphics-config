@@ -1389,26 +1389,28 @@ internal sealed class GfxBehaviour : MonoBehaviour
     /// <summary>
     /// Human-readable copy for a config key. Config keys are PascalCase
     /// (mirroring spec §4.2); the overlay shows normal sentence-style labels
-    /// instead of the raw identifier. Unknown keys fall back to the raw key.
+    /// instead of the raw identifier, phrased positively — a <c>Disable*</c>
+    /// key reads "Enable &lt;effect&gt;" (see <see cref="DrawToggle"/>, which
+    /// inverts that key's box). Unknown keys fall back to the raw key.
     /// </summary>
     private static string Label(string key)
     {
         switch (key)
         {
-            case nameof(GfxConfig.DisableAmbientOcclusion): return "Disable Ambient Occlusion";
-            case nameof(GfxConfig.DisableChromaticAberration): return "Disable Chromatic Aberration";
-            case nameof(GfxConfig.DisableDepthOfField): return "Disable Depth of Field";
-            case nameof(GfxConfig.DisableScreenSpaceReflections): return "Disable Screen Space Reflections";
-            case nameof(GfxConfig.DisableMotionBlur): return "Disable Motion Blur";
-            case nameof(GfxConfig.DisableBloom): return "Disable Bloom";
-            case nameof(GfxConfig.DisableFog): return "Disable Fog";
-            case nameof(GfxConfig.DisableCloudShadows): return "Disable Cloud Shadows";
-            case nameof(GfxConfig.DisableAmbientOcclusion2D): return "Disable Ambient Occlusion 2D";
-            case nameof(GfxConfig.DisableBlur): return "Disable Blur";
-            case nameof(GfxConfig.DisableSharpen): return "Disable Sharpen";
-            case nameof(GfxConfig.DisableVolumetricFog): return "Disable Volumetric Fog";
-            case nameof(GfxConfig.DisablePlanarReflections): return "Disable Planar Reflections";
-            case nameof(GfxConfig.DisableAura2): return "Disable Aura 2";
+            case nameof(GfxConfig.DisableAmbientOcclusion): return "Enable Ambient Occlusion";
+            case nameof(GfxConfig.DisableChromaticAberration): return "Enable Chromatic Aberration";
+            case nameof(GfxConfig.DisableDepthOfField): return "Enable Depth of Field";
+            case nameof(GfxConfig.DisableScreenSpaceReflections): return "Enable Screen Space Reflections";
+            case nameof(GfxConfig.DisableMotionBlur): return "Enable Motion Blur";
+            case nameof(GfxConfig.DisableBloom): return "Enable Bloom";
+            case nameof(GfxConfig.DisableFog): return "Enable Fog";
+            case nameof(GfxConfig.DisableCloudShadows): return "Enable Cloud Shadows";
+            case nameof(GfxConfig.DisableAmbientOcclusion2D): return "Enable Ambient Occlusion 2D";
+            case nameof(GfxConfig.DisableBlur): return "Enable Blur";
+            case nameof(GfxConfig.DisableSharpen): return "Enable Sharpen";
+            case nameof(GfxConfig.DisableVolumetricFog): return "Enable Volumetric Fog";
+            case nameof(GfxConfig.DisablePlanarReflections): return "Enable Planar Reflections";
+            case nameof(GfxConfig.DisableAura2): return "Enable Aura 2";
             case nameof(GfxConfig.OverrideMode): return "Override Mode";
             case nameof(GfxConfig.EnableSceneSuppression): return "Enable Scene Suppression";
             case nameof(GfxConfig.ShadowDistance): return "Shadow Distance";
@@ -1420,8 +1422,10 @@ internal sealed class GfxBehaviour : MonoBehaviour
     }
 
     /// <summary>
-    /// One row per bool entry: checkbox state IS the current value; the
-    /// label is the bare config key (value shown by the checkbox itself).
+    /// One row per bool entry. A <c>Disable*</c> key stores the negative of
+    /// what the row shows, so its box is drawn as the enabled state ("Enable
+    /// Fog" checked = Fog on); <c>Enable*</c> keys are direct. Only the label
+    /// and the box state differ — the stored key and default are unchanged.
     /// A change writes the entry, saves the cfg and sweeps immediately.
     /// </summary>
     private static void DrawToggle(ConfigEntry<bool> entry)
@@ -1432,11 +1436,13 @@ internal sealed class GfxBehaviour : MonoBehaviour
             return;
         }
 
+        var inverted = entry.Definition.Key.StartsWith("Disable", StringComparison.Ordinal);
         var current = entry.Value;
-        var next = GUILayout.Toggle(current, Label(entry.Definition.Key));
-        if (next != current)
+        var shown = inverted ? !current : current;
+        var next = GUILayout.Toggle(shown, Label(entry.Definition.Key));
+        if (next != shown)
         {
-            entry.Value = next;
+            entry.Value = inverted ? !next : next;
             ApplyChange();
         }
     }
