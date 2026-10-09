@@ -2,6 +2,8 @@
 
 A lightweight BepInEx 6 (IL2CPP) mod for *Heroes' Vow: Three Kingdoms* that disables expensive visual effects at runtime, so the game runs more smoothly on lower-end hardware. Settings live in a simple config file and can be flipped live from an in-game overlay. It **never modifies any game asset file**.
 
+![GFXConf showcase screenshot](docs/ss/showcase.png)
+
 ## Features
 
 - **Per-effect toggles** — PPv2 (Ambient Occlusion, Chromatic Aberration, Depth of Field, Screen Space Reflections, Motion Blur, Bloom), SCPE (Fog, Cloud Shadows, Ambient Occlusion 2D, Blur, Sharpen), Volumetric Fog, Planar Reflections, and Aura 2.
