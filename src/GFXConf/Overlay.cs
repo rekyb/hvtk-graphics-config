@@ -1339,21 +1339,17 @@ internal sealed class GfxBehaviour : MonoBehaviour
         DrawToggle(GfxConfig.DisablePlanarReflections);
         DrawToggle(GfxConfig.DisableAura2);
 
-        DrawSection("[Antialiasing]");
+        DrawSection("[Graphics]");
         DrawOverrideMode();
-
-        DrawSection("[General]");
-        DrawToggle(GfxConfig.ReapplyOnSceneLoad);
-        DrawDelaySeconds();
-        DrawToggle(GfxConfig.EnableF10Overlay);
-
-        DrawSection("[Quality]");
         DrawQualityOverride(GfxConfig.ShadowDistance, ShadowDistancePresets);
         DrawQualityOverride(GfxConfig.ShadowResolution, ShadowResolutionPresets);
         DrawQualityOverride(GfxConfig.LodBias, LodBiasPresets);
         DrawQualityOverride(GfxConfig.MSAA, MsaaPresets);
 
-        DrawSection("[Scenes]");
+        DrawSection("[General]");
+        DrawToggle(GfxConfig.ReapplyOnSceneLoad);
+        DrawDelaySeconds();
+        DrawToggle(GfxConfig.EnableF10Overlay);
         DrawSceneSuppressionToggle();
     }
 
