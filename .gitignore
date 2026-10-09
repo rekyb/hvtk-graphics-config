@@ -14,3 +14,6 @@ obj/
 *.user
 Thumbs.db
 .DS_Store
+
+# local git worktrees
+.worktrees/
