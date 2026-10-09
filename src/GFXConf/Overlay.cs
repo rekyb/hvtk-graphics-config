@@ -29,10 +29,7 @@ internal sealed class GfxBehaviour : MonoBehaviour
     // single pump instance, and statics are proven to work on this injected
     // type (the _registered/_created flags already rely on it).
 
-    /// <summary>
-    /// Overlay visibility — F10 always closes it; opening requires
-    /// <c>EnableF10Overlay = true</c> (gate applies to opening only).
-    /// </summary>
+    /// <summary>Overlay visibility — F10 toggles it (open when closed, close when open).</summary>
     private static bool _visible;
 
     /// <summary>Initial window position/size for the GUILayout.Window path.</summary>
@@ -121,12 +118,41 @@ internal sealed class GfxBehaviour : MonoBehaviour
     private static GUIStyle _sectionStyle;
 
     /// <summary>
-    /// The <c>OverrideMode</c> cycle (spec §4.2 domain) in contract order:
-    /// KeepOriginal → None → FastFXAA → FXAA → SMAA → TAA → wrap.
+    /// Cycle options for a string-domain override: <c>Value</c> is written to
+    /// the cfg (the spec §4.2 domain the sweep parser understands), <c>Label</c>
+    /// is the human-readable text the cycle button shows, so a numeric value
+    /// like "0.6" reads as "Fastest".
     /// </summary>
-    private static readonly string[] OverrideCycle =
+    private static readonly (string Value, string Label)[] OverrideModeOptions =
     {
-        "KeepOriginal", "None", "FastFXAA", "FXAA", "SMAA", "TAA"
+        ("KeepOriginal", "Keep Original"), ("None", "None"),
+        ("FastFXAA", "Fast FXAA"), ("FXAA", "FXAA"),
+        ("SMAA", "SMAA"), ("TAA", "TAA")
+    };
+
+    private static readonly (string Value, string Label)[] ShadowDistanceOptions =
+    {
+        ("KeepOriginal", "Keep Original"), ("40", "Quality"),
+        ("30", "Balanced"), ("25", "Fastest")
+    };
+
+    private static readonly (string Value, string Label)[] ShadowResolutionOptions =
+    {
+        ("KeepOriginal", "Keep Original"), ("Low", "Low"),
+        ("Medium", "Medium"), ("High", "High"),
+        ("VeryHigh", "Very High")
+    };
+
+    private static readonly (string Value, string Label)[] LodBiasOptions =
+    {
+        ("KeepOriginal", "Keep Original"), ("0.8", "Quality"),
+        ("0.7", "Balanced"), ("0.6", "Fastest")
+    };
+
+    private static readonly (string Value, string Label)[] MsaaOptions =
+    {
+        ("KeepOriginal", "Keep Original"), ("0", "Off"),
+        ("2", "2x"), ("4", "4x"), ("8", "8x")
     };
 
     /// <summary>
@@ -251,15 +277,9 @@ internal sealed class GfxBehaviour : MonoBehaviour
 
         HandleSceneCaptureHotkey();
 
-        // F10 toggle (contract amendment — gate exempts CLOSING): the key is
-        // ALWAYS read (no gate before GetKeyDown). An open overlay closes on
-        // F10 regardless of EnableF10Overlay, so unchecking the toggle while
-        // the overlay is open can never lock the user out of closing it. Only
-        // OPENING is gated: EnableF10Overlay false (or null — Bind failed,
-        // already warned once) → F10 does nothing while closed, no log line.
-        // GetKeyDown is only read once per frame, and any thrown failure
-        // latches F10 off for the session so a persistent input error cannot
-        // warn every frame.
+        // F10 toggles the overlay: open when closed, close when open. GetKeyDown
+        // is only read once per frame, and any thrown failure latches F10 off
+        // for the session so a persistent input error cannot warn every frame.
         if (_f10Broken)
         {
             return;
@@ -275,11 +295,7 @@ internal sealed class GfxBehaviour : MonoBehaviour
                 }
                 else
                 {
-                    var gate = GfxConfig.EnableF10Overlay;
-                    if (gate != null && gate.Value)
-                    {
-                        OpenOverlay();
-                    }
+                    OpenOverlay();
                 }
             }
         }
@@ -287,6 +303,23 @@ internal sealed class GfxBehaviour : MonoBehaviour
         {
             _f10Broken = true;
             GfxConfig.LogSource?.LogWarning($"[GFXConf] F10 handling disabled: {ex}");
+        }
+    }
+
+    /// <summary>
+    /// Runs after every <c>Update</c>: re-force the held effects off, so a
+    /// profile the game re-applied during its Update is off before this frame
+    /// renders. See <see cref="Sweeper.Reapply"/>.
+    /// </summary>
+    private void LateUpdate()
+    {
+        try
+        {
+            Sweeper.Reapply();
+        }
+        catch (Exception ex)
+        {
+            GfxConfig.LogSource?.LogWarning($"[GFXConf] effect hold failed: {ex}");
         }
     }
 
@@ -320,6 +353,12 @@ internal sealed class GfxBehaviour : MonoBehaviour
             if (!_sceneTrackingAvailable || _sceneSuppressionBroken)
             {
                 GfxConfig.LogSource?.LogInfo("[GFXConf] scene capture skipped: scene tracking unavailable");
+                return;
+            }
+
+            if (GfxConfig.EnableSceneSuppression?.Value != true)
+            {
+                GfxConfig.LogSource?.LogInfo("[GFXConf] scene capture skipped: scene pause disabled");
                 return;
             }
 
@@ -462,6 +501,14 @@ internal sealed class GfxBehaviour : MonoBehaviour
     {
         try
         {
+            // Master switch (v0.4.0): while off, never suppress and always
+            // restore any active suppression (silent no-op when none active).
+            if (GfxConfig.EnableSceneSuppression?.Value != true)
+            {
+                RestoreSceneSuppression("scene pause disabled");
+                return;
+            }
+
             if (!_sceneTrackingAvailable || _sceneSuppressionBroken)
             {
                 return;
@@ -499,7 +546,7 @@ internal sealed class GfxBehaviour : MonoBehaviour
 
             _activeAllowedScenes.Clear();
             _activeAllowedScenes.UnionWith(currentTargets);
-            _snapshotReadyTime = Time.realtimeSinceStartup + Math.Max(0, GfxConfig.DelaySeconds?.Value ?? 2);
+            _snapshotReadyTime = Time.realtimeSinceStartup + GfxConfig.DelaySeconds;
             _snapshotDelayPending = true;
         }
         catch (Exception ex)
@@ -1285,8 +1332,9 @@ internal sealed class GfxBehaviour : MonoBehaviour
     }
 
     /// <summary>
-    /// The scrollable controls: the 18 overlay-editable §4.2 entries under
-    /// their 5 section headers. Scene settings remain config-file-only. No
+    /// The scrollable controls: the overlay-editable §4.2 entries grouped under
+    /// their section headers, ordered Quality, then the post-processing,
+    /// volumetrics and extra sections. Scene settings remain config-file-only. No
     /// reflection — only the known
     /// <see cref="GfxConfig"/> entries are ever listed. A null entry (Bind
     /// failed) draws a placeholder instead of throwing. Used by both the
@@ -1299,7 +1347,14 @@ internal sealed class GfxBehaviour : MonoBehaviour
             _sectionStyle = new GUIStyle(GUI.skin.label) { fontStyle = FontStyle.Bold };
         }
 
-        DrawSection("[PPv2]");
+        DrawSection("[Quality]");
+        DrawOptionCycle(GfxConfig.OverrideMode, OverrideModeOptions);
+        DrawOptionCycle(GfxConfig.ShadowDistance, ShadowDistanceOptions);
+        DrawOptionCycle(GfxConfig.ShadowResolution, ShadowResolutionOptions);
+        DrawOptionCycle(GfxConfig.LodBias, LodBiasOptions);
+        DrawOptionCycle(GfxConfig.MSAA, MsaaOptions);
+
+        DrawSection("[Post Processing Stack v2]");
         DrawToggle(GfxConfig.DisableAmbientOcclusion);
         DrawToggle(GfxConfig.DisableChromaticAberration);
         DrawToggle(GfxConfig.DisableDepthOfField);
@@ -1307,7 +1362,7 @@ internal sealed class GfxBehaviour : MonoBehaviour
         DrawToggle(GfxConfig.DisableMotionBlur);
         DrawToggle(GfxConfig.DisableBloom);
 
-        DrawSection("[SCPE]");
+        DrawSection("[Scene Color Processing Effects]");
         DrawToggle(GfxConfig.DisableFog);
         DrawToggle(GfxConfig.DisableCloudShadows);
         DrawToggle(GfxConfig.DisableAmbientOcclusion2D);
@@ -1319,19 +1374,49 @@ internal sealed class GfxBehaviour : MonoBehaviour
         DrawToggle(GfxConfig.DisablePlanarReflections);
         DrawToggle(GfxConfig.DisableAura2);
 
-        DrawSection("[Antialiasing]");
-        DrawOverrideMode();
-
-        DrawSection("[General]");
-        DrawToggle(GfxConfig.ReapplyOnSceneLoad);
-        DrawDelaySeconds();
-        DrawToggle(GfxConfig.EnableF10Overlay);
+        DrawSection("[Extra]");
+        DrawSceneSuppressionToggle();
+        var captureKey = GfxConfig.CaptureSceneHotkey?.Value ?? KeyCode.F9;
+        GUILayout.Label($"Press {captureKey} in an idle scene to add it to the suppression list.");
     }
 
     private static void DrawSection(string title)
     {
         GUILayout.Space(4f);
         GUILayout.Label(title, _sectionStyle);
+    }
+
+    /// <summary>
+    /// Human-readable copy for a config key. Config keys are PascalCase
+    /// (mirroring spec §4.2); the overlay shows normal sentence-style labels
+    /// instead of the raw identifier. Unknown keys fall back to the raw key.
+    /// </summary>
+    private static string Label(string key)
+    {
+        switch (key)
+        {
+            case nameof(GfxConfig.DisableAmbientOcclusion): return "Disable Ambient Occlusion";
+            case nameof(GfxConfig.DisableChromaticAberration): return "Disable Chromatic Aberration";
+            case nameof(GfxConfig.DisableDepthOfField): return "Disable Depth of Field";
+            case nameof(GfxConfig.DisableScreenSpaceReflections): return "Disable Screen Space Reflections";
+            case nameof(GfxConfig.DisableMotionBlur): return "Disable Motion Blur";
+            case nameof(GfxConfig.DisableBloom): return "Disable Bloom";
+            case nameof(GfxConfig.DisableFog): return "Disable Fog";
+            case nameof(GfxConfig.DisableCloudShadows): return "Disable Cloud Shadows";
+            case nameof(GfxConfig.DisableAmbientOcclusion2D): return "Disable Ambient Occlusion 2D";
+            case nameof(GfxConfig.DisableBlur): return "Disable Blur";
+            case nameof(GfxConfig.DisableSharpen): return "Disable Sharpen";
+            case nameof(GfxConfig.DisableVolumetricFog): return "Disable Volumetric Fog";
+            case nameof(GfxConfig.DisablePlanarReflections): return "Disable Planar Reflections";
+            case nameof(GfxConfig.DisableAura2): return "Disable Aura 2";
+            case nameof(GfxConfig.OverrideMode): return "Override Mode";
+            case nameof(GfxConfig.EnableSceneSuppression): return "Enable Scene Suppression";
+            case nameof(GfxConfig.ShadowDistance): return "Shadow Distance";
+            case nameof(GfxConfig.ShadowResolution): return "Shadow Resolution";
+            case nameof(GfxConfig.LodBias): return "LOD Bias";
+            case nameof(GfxConfig.MSAA): return "MSAA";
+            default: return key;
+        }
     }
 
     /// <summary>
@@ -1348,7 +1433,7 @@ internal sealed class GfxBehaviour : MonoBehaviour
         }
 
         var current = entry.Value;
-        var next = GUILayout.Toggle(current, entry.Definition.Key);
+        var next = GUILayout.Toggle(current, Label(entry.Definition.Key));
         if (next != current)
         {
             entry.Value = next;
@@ -1357,104 +1442,80 @@ internal sealed class GfxBehaviour : MonoBehaviour
     }
 
     /// <summary>
-    /// OverrideMode is a string domain, not a bool → a button that cycles
-    /// KeepOriginal → None → FastFXAA → FXAA → SMAA → TAA → wrap and shows
-    /// the current value.
+    /// A string-domain override (OverrideMode / [Quality]) is cycled by a
+    /// single button. The button shows the option's human-readable label
+    /// (e.g. "0.6" → "Fastest"); the cfg still stores the raw spec §4.2 value.
+    /// A change writes the entry, saves the cfg and sweeps immediately.
     /// </summary>
-    private static void DrawOverrideMode()
+    private static void DrawOptionCycle(ConfigEntry<string> entry, (string Value, string Label)[] options)
     {
-        var entry = GfxConfig.OverrideMode;
         if (entry == null)
         {
             GUILayout.Label("(config unavailable — see log)");
             return;
         }
 
-        if (GUILayout.Button($"OverrideMode = {entry.Value}"))
+        var current = entry.Value;
+        if (GUILayout.Button($"{Label(entry.Definition.Key)} = {DescribeOption(current, options)}"))
         {
-            entry.Value = NextOverrideMode(entry.Value);
+            entry.Value = NextOption(current, options);
             ApplyChange();
         }
     }
 
-    /// <summary>
-    /// Next value in the cycle. Values written are the spec §4.2 aliases the
-    /// sweep parser understands; a full enum member name typed by hand into
-    /// the cfg maps to its alias so the cycle keeps working, and an
-    /// unrecognised value counts as KeepOriginal (next press → None).
-    /// </summary>
-    private static string NextOverrideMode(string current)
+    /// <summary>Label for a stored value; a hand-edited value not in the list shows verbatim.</summary>
+    private static string DescribeOption(string value, (string Value, string Label)[] options)
+    {
+        foreach (var option in options)
+        {
+            if (string.Equals(option.Value, value, StringComparison.OrdinalIgnoreCase))
+            {
+                return option.Label;
+            }
+        }
+
+        return value;
+    }
+
+    /// <summary>Next value in the cycle; an unrecognised value wraps to the first option.</summary>
+    private static string NextOption(string value, (string Value, string Label)[] options)
     {
         var index = -1;
-        for (var i = 0; i < OverrideCycle.Length; i++)
+        for (var i = 0; i < options.Length; i++)
         {
-            if (string.Equals(OverrideCycle[i], current, StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(options[i].Value, value, StringComparison.OrdinalIgnoreCase))
             {
                 index = i;
                 break;
             }
         }
 
-        if (index < 0)
-        {
-            switch (current?.Trim().ToLowerInvariant())
-            {
-                case "fastapproximateantialiasing":
-                    index = 2; // FastFXAA
-                    break;
-                case "subpixelmorphologicalantialiasing":
-                    index = 4; // SMAA
-                    break;
-                case "temporalantialiasing":
-                    index = 5; // TAA
-                    break;
-                default:
-                    index = 0; // unknown → treated as KeepOriginal, next = None
-                    break;
-            }
-        }
-
-        return OverrideCycle[(index + 1) % OverrideCycle.Length];
+        return options[(index + 1) % options.Length].Value;
     }
 
     /// <summary>
-    /// DelaySeconds: −/+ int adjustment clamped to 0..60, current value
-    /// shown. At a clamp limit the buttons are a no-op (no write, no sweep).
+    /// The scene-pauser master switch. Unlike the generic toggles, flipping it
+    /// re-evaluates suppression immediately (off = instant live-3D restore,
+    /// on = instant re-capture/suppress of an eligible scene), not just an
+    /// effect sweep.
     /// </summary>
-    private static void DrawDelaySeconds()
+    private static void DrawSceneSuppressionToggle()
     {
-        var entry = GfxConfig.DelaySeconds;
+        var entry = GfxConfig.EnableSceneSuppression;
         if (entry == null)
         {
             GUILayout.Label("(config unavailable — see log)");
             return;
         }
 
-        GUILayout.BeginHorizontal();
-        GUILayout.Label($"DelaySeconds = {entry.Value}", GUILayout.Width(170f));
-        if (GUILayout.Button("-", GUILayout.Width(30f)))
+        var current = entry.Value;
+        var next = GUILayout.Toggle(current, Label(entry.Definition.Key));
+        if (next != current)
         {
-            SetDelay(entry, entry.Value - 1);
+            entry.Value = next;
+            GfxConfig.Save();
+            EvaluateSceneSuppression();
         }
-
-        if (GUILayout.Button("+", GUILayout.Width(30f)))
-        {
-            SetDelay(entry, entry.Value + 1);
-        }
-
-        GUILayout.EndHorizontal();
-    }
-
-    private static void SetDelay(ConfigEntry<int> entry, int proposed)
-    {
-        var clamped = Math.Clamp(proposed, 0, 60);
-        if (clamped == entry.Value)
-        {
-            return;
-        }
-
-        entry.Value = clamped;
-        ApplyChange();
     }
 
     /// <summary>

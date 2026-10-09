@@ -69,14 +69,14 @@ at `<game>/BepInEx/config/gfxconf.cfg` — source of truth. In-game F10 overlay
 
 ### 4.1 Data flow
 
-1. `Awake()`: bind config entries, log banner, run initial sweep after
-   `DelaySeconds` (default 2 s).
+1. `Awake()`: bind config entries, log banner, run initial sweep after a
+   fixed 3 s delay.
 2. Subscribe to `SceneManager.sceneLoaded` and `SceneManager.sceneUnloaded`
    with strongly-held IL2CPP delegates. Scene events always update the loaded
-   set for render suppression; `ReapplyOnSceneLoad` only gates effect sweeps.
+   set for render suppression and always trigger an effect sweep.
 3. Scene suppression: match `SceneSuppressionAllowlist` against the full loaded
    set, not the active scene. When an allowlisted name is loaded, keep normal
-   rendering and UI active for `DelaySeconds`, then capture after one rendered
+   rendering and UI active for 2 s, then capture after one rendered
    frame with screen-space UI hidden. Restore the UI, set camera culling masks
     to zero, and disable post-process layers. Restore original state when no
     allowlisted scene remains. The initial veto set is empty; interactive
@@ -85,10 +85,13 @@ at `<game>/BepInEx/config/gfxconf.cfg` — source of truth. In-game F10 overlay
     to catch late-created or re-enabled objects. F9 adds the latest loaded scene
     to the allowlist and saves the config.
 4. Sweep (single method, try/catch around each group):
-   - **Settings groups:** `Resources.FindObjectsOfTypeAll<PostProcessProfile>()`
+   - **Settings group:** `Resources.FindObjectsOfTypeAll<PostProcessProfile>()`
      (catches shared + volume-instantiated copies). For each `profile.settings`
      entry, match concrete type name against enabled toggles → set
-     `active = false`; `enabled.value = false`; `enabled.OverrideState = true`.
+     `active = false` and force `enabled` off via the native `Override(bool)`
+     method. The interop-generated `ParameterOverride<T>.value` property SETTER
+     is a silent no-op on this build (the getter works), so the write falls back
+     to a direct il2cpp field write by offset if `Override` does not land.
    - **Component groups:** `FindObjectsOfType` for `VolumetricFog`,
      `PlanarReflection` (Ceto), Aura2 `Aura`/`AuraVolume`/`AuraCamera`
      (type lookups by name across loaded assemblies; missing type = skip)
@@ -96,11 +99,23 @@ at `<game>/BepInEx/config/gfxconf.cfg` — source of truth. In-game F10 overlay
    - **AA override:** if `OverrideMode != KeepOriginal` → for each
      `PostProcessLayer`, parse config string to enum by name and assign
      `antialiasingMode`.
+   - **Quality overrides (v0.4.0):** for each `[Quality]` key, `KeepOriginal`
+     (or empty) restores the captured stock value and drops the override;
+     otherwise parse (float / `ShadowResolution` enum / int) and assign the
+     matching `QualitySettings` member, capturing the stock value on first
+     application. Invalid values log one warning and are skipped.
    - Log one summary line per sweep:
-     `"[GFXConf] scene=73: AO=4, CA=4, SCPE.Fog=4, VolumetricFog=4, planar=0"`.
+     `"[GFXConf] scene=73: AO=4, CA=4, SCPE.Fog=4, VolumetricFog=4, planar=0, quality=2"`.
+   - **Hold (v0.4.0):** the game's weather/season system can rewrite
+     post-process profiles at runtime, so the captured settings are re-forced
+     off each frame in a `LateUpdate` hold (`Sweeper.Reapply`) — after the
+     game's Update, before the frame renders. Idempotent and cheap (no rescan);
+     the component and AA groups remain one-shot.
 5. F10 overlay: controls the existing interactive settings; on change →
-   `ConfigFile.Save()` + immediate sweep (effects flip live). Scene allowlist
-   and capture-hotkey entries are config-file-only, not F10 text controls.
+   `ConfigFile.Save()` + immediate sweep (effects flip live). The `[Quality]`
+   overrides are cycle buttons; `EnableSceneSuppression` is a toggle that
+   immediately re-evaluates suppression. The scene allowlist and
+   capture-hotkey entries remain config-file-only, not F10 text controls.
 
 ### 4.2 Config schema (defaults)
 
@@ -128,12 +143,14 @@ DisableAura2 = true
 [Antialiasing]
 OverrideMode = KeepOriginal   ; None | FastFXAA | FXAA | SMAA | TAA
 
-[General]
-ReapplyOnSceneLoad = true
-DelaySeconds = 2
-EnableF10Overlay = true
+[Quality]
+ShadowDistance = KeepOriginal     ; KeepOriginal | float world units (e.g. 40 / 30 / 25)
+ShadowResolution = KeepOriginal   ; KeepOriginal | Low | Medium | High | VeryHigh
+LodBias = KeepOriginal            ; KeepOriginal | float (e.g. 0.8 / 0.7 / 0.6)
+MSAA = KeepOriginal               ; KeepOriginal | 0 | 2 | 4 | 8
 
 [Scenes]
+EnableSceneSuppression = true
 SceneSuppressionAllowlist = SS_Farmland, SS_City_Market, SS_City_Street
 CaptureSceneHotkey = F9
 ```
@@ -187,7 +204,7 @@ CaptureSceneHotkey = F9
 - `docs/superpowers/specs/2026-10-07-gfxconf-design.md` — this spec
 - `docs/superpowers/plans/…` — implementation plan (next step)
 - Installed artifact: `GFXConf.dll` + generated `gfxconf.cfg` in game folder
-- `docs/user-guide.md` — install/uninstall/config reference for the user
+- `README.md` — install/uninstall/config reference for the user
 
 ## 8. Explicitly out of scope
 

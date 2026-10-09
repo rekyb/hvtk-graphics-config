@@ -116,8 +116,7 @@ image. No game input system is modified.
   startup; do not wait for another scene event to apply an eligible default.
 - On entry to an eligible set, keep rendering and UI active for `DelaySeconds`.
   Then hide screen-space UI for one rendered frame, capture, restore the UI, and
-  suppress rendering. The default delay is 2 seconds; the user may tune it in
-  `[General]` before launch.
+  suppress rendering. The delay is a fixed 3 seconds.
 - If the set of loaded allowlisted scenes changes while still eligible,
   restore rendering immediately and restart the delay before refreshing the
   image and suppressing rendering again.
