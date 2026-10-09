@@ -51,9 +51,18 @@ internal static class GfxConfig
     internal static ConfigEntry<int> DelaySeconds;
     internal static ConfigEntry<bool> EnableF10Overlay;
 
-    // [Scenes] — intentionally config-file-only; the allowlist is not a text field in the F10 overlay.
+    // [Quality] — render-quality overrides (Built-in RP QualitySettings); KeepOriginal = no-op.
+    internal static ConfigEntry<string> ShadowDistance;
+    internal static ConfigEntry<string> ShadowResolution;
+    internal static ConfigEntry<string> LodBias;
+    internal static ConfigEntry<string> MSAA;
+
+    // [Scenes] — allowlist/hotkey are config-file-only; the master switch below is the one overlay-editable scene key.
     internal static ConfigEntry<string> SceneSuppressionAllowlist;
     internal static ConfigEntry<KeyCode> CaptureSceneHotkey;
+
+    // Master switch for the idle-scene render suppression ("scene pauser").
+    internal static ConfigEntry<bool> EnableSceneSuppression;
 
     /// <summary>
     /// Toggle entries keyed by the concrete settings type name, for the PPv2
@@ -102,6 +111,17 @@ internal static class GfxConfig
                 "Comma-separated runtime scene names where 3D rendering is suppressed. Edit in gfxconf.cfg; use F9 only in confirmed idle scenes.");
             CaptureSceneHotkey = File.Bind("Scenes", nameof(CaptureSceneHotkey), KeyCode.F9,
                 "Add the most recently loaded scene to SceneSuppressionAllowlist. Use only in a confirmed idle scene.");
+            EnableSceneSuppression = File.Bind("Scenes", nameof(EnableSceneSuppression), true,
+                "Master switch for idle-scene 3D render suppression (the frozen-scene 'scene pauser'). Set false to keep live 3D rendering in allowlisted scenes.");
+
+            ShadowDistance = File.Bind("Quality", nameof(ShadowDistance), "KeepOriginal",
+                "Override shadow draw distance in world units: KeepOriginal (default) or a value like 40 / 30 / 25.");
+            ShadowResolution = File.Bind("Quality", nameof(ShadowResolution), "KeepOriginal",
+                "Override shadow resolution: KeepOriginal (default) or Low | Medium | High | VeryHigh.");
+            LodBias = File.Bind("Quality", nameof(LodBias), "KeepOriginal",
+                "Override LOD bias: KeepOriginal (default) or a value like 0.8 / 0.7 / 0.6 (lower = coarser LODs).");
+            MSAA = File.Bind("Quality", nameof(MSAA), "KeepOriginal",
+                "Override multisample anti-aliasing: KeepOriginal (default) or 0 | 2 | 4 | 8.");
 
             SettingToggles = new Dictionary<string, ConfigEntry<bool>>
             {

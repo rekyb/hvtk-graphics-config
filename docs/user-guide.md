@@ -1,7 +1,7 @@
 # GFXConf — User Guide
 
 Config-driven low-effects plugin for *Heroes' Vow: Three Kingdoms*.
-Version **0.3.0** (plugin ID `com.rekyb.hvtk.gfxconf`, DLL `GFXConf.dll`).
+Version **0.4.0** (plugin ID `com.rekyb.hvtk.gfxconf`, DLL `GFXConf.dll`).
 
 GFXConf disables expensive visual effects at runtime. It **never modifies any
 game asset file** — everything it does lives in `BepInEx\` (plugin, config,
@@ -54,6 +54,14 @@ time it is reopened.
   before closing it).
 - **`OverrideMode` in the overlay is a cycle button:**
   `KeepOriginal → None → FastFXAA → FXAA → SMAA → TAA → wrap`.
+- **`[Quality]` overrides are cycle buttons** (`KeepOriginal` first), one each
+  for `ShadowDistance`, `ShadowResolution`, `LodBias`, and `MSAA`. They apply
+  live to Unity's global `QualitySettings`; choosing `KeepOriginal` restores
+  the game's original value.
+- **`EnableSceneSuppression` is a live master switch** for the idle-scene
+  "scene pauser". Turn it **off** to keep live 3D rendering in allowlisted
+  idle scenes, and **on** to re-freeze them — no restart needed. While off,
+  the F9 capture hotkey is ignored.
 
 ### Idle-scene rendering
 
@@ -118,6 +126,15 @@ config-file changes.
 |---|---|---|
 | `OverrideMode` | `KeepOriginal` | PostProcessLayer antialiasing override: KeepOriginal (default) or `None \| FastFXAA \| FXAA \| SMAA \| TAA`. **Alias mapping:** `FXAA` and `FastFXAA` both use this build's single FastApproximateAntialiasing mode — `FastFXAA` sets `fastMode = true`, `FXAA` sets `fastMode = false`; `None`/`SMAA`/`TAA` set only the mode. Anything else logs one warning and leaves the game's original AA untouched. |
 
+### `[Quality]` — global quality overrides
+
+| Key | Default | Description |
+|---|---|---|
+| `ShadowDistance` | `KeepOriginal` | Shadow draw distance in world units; or `KeepOriginal` to leave the game default. |
+| `ShadowResolution` | `KeepOriginal` | `Low` / `Medium` / `High` / `VeryHigh`; or `KeepOriginal`. |
+| `LodBias` | `KeepOriginal` | LOD bias as a float (lower = coarser LODs); or `KeepOriginal`. |
+| `MSAA` | `KeepOriginal` | Multisample anti-aliasing `0` / `2` / `4` / `8`; or `KeepOriginal`. |
+
 ### `[General]`
 
 | Key | Default | Description |
@@ -130,6 +147,7 @@ config-file changes.
 
 | Key | Default | Description |
 |---|---|---|
+| `EnableSceneSuppression` | `true` | Master switch for idle-scene render suppression (the "scene pauser"). Set `false` to keep live 3D rendering in allowlisted scenes. |
 | `SceneSuppressionAllowlist` | `SS_Farmland, SS_City_Market, SS_City_Street` | Comma-separated runtime scene names to suppress; edit in the config file. |
 | `CaptureSceneHotkey` | `F9` | Add the most recently loaded scene to the allowlist; use only in confirmed safe idle scenes. |
 
@@ -149,11 +167,11 @@ Filter for `GFXConf|Unhandled exception`. A **clean run** looks like this
 (pinned log line formats):
 
 ```
-[Info   :   BepInEx] Loading [GFXConf 0.3.0]
-[Info   :   GFXConf] [GFXConf] v0.3.0 loaded (com.rekyb.hvtk.gfxconf)
+[Info   :   BepInEx] Loading [GFXConf 0.4.0]
+[Info   :   GFXConf] [GFXConf] v0.4.0 loaded (com.rekyb.hvtk.gfxconf)
 [Info   :   GFXConf] [GFXConf] config: <game>\BepInEx\config\gfxconf.cfg
 [Info   :   GFXConf] [GFXConf] scene=StartMenu sweep in 2s
-[Info   :   GFXConf] [GFXConf] scene=StartMenu: AO=0, CA=0, DoF=0, SSR=0, MB=0, Bloom=0, SCPE.Fog=0, SCPE.CloudShadows=0, SCPE.AO2D=0, SCPE.Blur=0, SCPE.Sharpen=0, VolumetricFog=0, planar=0, aura=0, aa=0
+[Info   :   GFXConf] [GFXConf] scene=StartMenu: AO=0, CA=0, DoF=0, SSR=0, MB=0, Bloom=0, SCPE.Fog=0, SCPE.CloudShadows=0, SCPE.AO2D=0, SCPE.Blur=0, SCPE.Sharpen=0, VolumetricFog=0, planar=0, aura=0, aa=0, quality=0
 ```
 
 What to look for:

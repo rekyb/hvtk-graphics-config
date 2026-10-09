@@ -96,11 +96,18 @@ at `<game>/BepInEx/config/gfxconf.cfg` — source of truth. In-game F10 overlay
    - **AA override:** if `OverrideMode != KeepOriginal` → for each
      `PostProcessLayer`, parse config string to enum by name and assign
      `antialiasingMode`.
+   - **Quality overrides (v0.4.0):** for each `[Quality]` key, `KeepOriginal`
+     (or empty) restores the captured stock value and drops the override;
+     otherwise parse (float / `ShadowResolution` enum / int) and assign the
+     matching `QualitySettings` member, capturing the stock value on first
+     application. Invalid values log one warning and are skipped.
    - Log one summary line per sweep:
-     `"[GFXConf] scene=73: AO=4, CA=4, SCPE.Fog=4, VolumetricFog=4, planar=0"`.
+     `"[GFXConf] scene=73: AO=4, CA=4, SCPE.Fog=4, VolumetricFog=4, planar=0, quality=2"`.
 5. F10 overlay: controls the existing interactive settings; on change →
-   `ConfigFile.Save()` + immediate sweep (effects flip live). Scene allowlist
-   and capture-hotkey entries are config-file-only, not F10 text controls.
+   `ConfigFile.Save()` + immediate sweep (effects flip live). The `[Quality]`
+   overrides are cycle buttons; `EnableSceneSuppression` is a toggle that
+   immediately re-evaluates suppression. The scene allowlist and
+   capture-hotkey entries remain config-file-only, not F10 text controls.
 
 ### 4.2 Config schema (defaults)
 
@@ -128,12 +135,19 @@ DisableAura2 = true
 [Antialiasing]
 OverrideMode = KeepOriginal   ; None | FastFXAA | FXAA | SMAA | TAA
 
+[Quality]
+ShadowDistance = KeepOriginal     ; KeepOriginal | float world units (e.g. 40 / 30 / 25)
+ShadowResolution = KeepOriginal   ; KeepOriginal | Low | Medium | High | VeryHigh
+LodBias = KeepOriginal            ; KeepOriginal | float (e.g. 0.8 / 0.7 / 0.6)
+MSAA = KeepOriginal               ; KeepOriginal | 0 | 2 | 4 | 8
+
 [General]
 ReapplyOnSceneLoad = true
 DelaySeconds = 2
 EnableF10Overlay = true
 
 [Scenes]
+EnableSceneSuppression = true
 SceneSuppressionAllowlist = SS_Farmland, SS_City_Market, SS_City_Street
 CaptureSceneHotkey = F9
 ```

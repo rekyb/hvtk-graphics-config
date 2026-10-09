@@ -129,6 +129,12 @@ internal sealed class GfxBehaviour : MonoBehaviour
         "KeepOriginal", "None", "FastFXAA", "FXAA", "SMAA", "TAA"
     };
 
+    /// <summary>Cycle presets for the four [Quality] overrides (KeepOriginal first).</summary>
+    private static readonly string[] ShadowDistancePresets = { "KeepOriginal", "40", "30", "25" };
+    private static readonly string[] ShadowResolutionPresets = { "KeepOriginal", "Low", "Medium", "High", "VeryHigh" };
+    private static readonly string[] LodBiasPresets = { "KeepOriginal", "0.8", "0.7", "0.6" };
+    private static readonly string[] MsaaPresets = { "KeepOriginal", "0", "2", "4", "8" };
+
     /// <summary>
     /// Cached window callback (rules §3 "no allocations in hot paths"):
     /// <see cref="GUILayout.Window"/>'s parameter is an interop (il2cpp)
@@ -323,6 +329,12 @@ internal sealed class GfxBehaviour : MonoBehaviour
                 return;
             }
 
+            if (GfxConfig.EnableSceneSuppression?.Value != true)
+            {
+                GfxConfig.LogSource?.LogInfo("[GFXConf] scene capture skipped: scene pause disabled");
+                return;
+            }
+
             if (string.IsNullOrWhiteSpace(_lastLoadedSceneName))
             {
                 GfxConfig.LogSource?.LogInfo("[GFXConf] scene capture skipped: no tracked loaded scene");
@@ -462,6 +474,14 @@ internal sealed class GfxBehaviour : MonoBehaviour
     {
         try
         {
+            // Master switch (v0.4.0): while off, never suppress and always
+            // restore any active suppression (silent no-op when none active).
+            if (GfxConfig.EnableSceneSuppression?.Value != true)
+            {
+                RestoreSceneSuppression("scene pause disabled");
+                return;
+            }
+
             if (!_sceneTrackingAvailable || _sceneSuppressionBroken)
             {
                 return;
@@ -1326,6 +1346,15 @@ internal sealed class GfxBehaviour : MonoBehaviour
         DrawToggle(GfxConfig.ReapplyOnSceneLoad);
         DrawDelaySeconds();
         DrawToggle(GfxConfig.EnableF10Overlay);
+
+        DrawSection("[Quality]");
+        DrawQualityOverride(GfxConfig.ShadowDistance, ShadowDistancePresets);
+        DrawQualityOverride(GfxConfig.ShadowResolution, ShadowResolutionPresets);
+        DrawQualityOverride(GfxConfig.LodBias, LodBiasPresets);
+        DrawQualityOverride(GfxConfig.MSAA, MsaaPresets);
+
+        DrawSection("[Scenes]");
+        DrawSceneSuppressionToggle();
     }
 
     private static void DrawSection(string title)
@@ -1415,6 +1444,66 @@ internal sealed class GfxBehaviour : MonoBehaviour
         }
 
         return OverrideCycle[(index + 1) % OverrideCycle.Length];
+    }
+
+    /// <summary>
+    /// A [Quality] override is a string domain (KeepOriginal or a preset
+    /// value), not a bool → a cycle button, same shape as OverrideMode.
+    /// </summary>
+    private static void DrawQualityOverride(ConfigEntry<string> entry, string[] presets)
+    {
+        if (entry == null)
+        {
+            GUILayout.Label("(config unavailable — see log)");
+            return;
+        }
+
+        if (GUILayout.Button($"{entry.Definition.Key} = {entry.Value}"))
+        {
+            entry.Value = NextPreset(entry.Value, presets);
+            ApplyChange();
+        }
+    }
+
+    /// <summary>Next value in a quality cycle; an unrecognised value wraps to KeepOriginal.</summary>
+    private static string NextPreset(string current, string[] presets)
+    {
+        var index = -1;
+        for (var i = 0; i < presets.Length; i++)
+        {
+            if (string.Equals(presets[i], current, StringComparison.OrdinalIgnoreCase))
+            {
+                index = i;
+                break;
+            }
+        }
+
+        return presets[(index + 1) % presets.Length];
+    }
+
+    /// <summary>
+    /// The scene-pauser master switch. Unlike the generic toggles, flipping it
+    /// re-evaluates suppression immediately (off = instant live-3D restore,
+    /// on = instant re-capture/suppress of an eligible scene), not just an
+    /// effect sweep.
+    /// </summary>
+    private static void DrawSceneSuppressionToggle()
+    {
+        var entry = GfxConfig.EnableSceneSuppression;
+        if (entry == null)
+        {
+            GUILayout.Label("(config unavailable — see log)");
+            return;
+        }
+
+        var current = entry.Value;
+        var next = GUILayout.Toggle(current, entry.Definition.Key);
+        if (next != current)
+        {
+            entry.Value = next;
+            GfxConfig.Save();
+            EvaluateSceneSuppression();
+        }
     }
 
     /// <summary>

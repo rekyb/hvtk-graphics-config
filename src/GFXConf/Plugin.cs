@@ -5,7 +5,7 @@ using UnityEngine.SceneManagement;
 
 namespace GFXConf;
 
-[BepInPlugin("com.rekyb.hvtk.gfxconf", "GFXConf", "0.3.0")]
+[BepInPlugin("com.rekyb.hvtk.gfxconf", "GFXConf", "0.4.0")]
 public class Plugin : BasePlugin
 {
     // Strong reference so the managed handler cannot be collected while the
@@ -21,7 +21,7 @@ public class Plugin : BasePlugin
             // it the log source first so bind failures can still be warned about.
             GfxConfig.LogSource = Log;
             GfxConfig.Bind();
-            Log.LogInfo("[GFXConf] v0.3.0 loaded (com.rekyb.hvtk.gfxconf)");
+            Log.LogInfo("[GFXConf] v0.4.0 loaded (com.rekyb.hvtk.gfxconf)");
             Log.LogInfo($"[GFXConf] config: {GfxConfig.File?.ConfigFilePath ?? "(config unavailable)"}");
 
             GfxBehaviour.EnsureCreated();

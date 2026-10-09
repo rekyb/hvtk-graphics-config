@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using UnityEngine;
 using UnityEngine.Rendering.PostProcessing;
 
@@ -65,6 +66,14 @@ internal static class Sweeper
     /// disable recaptures freshly.
     /// </summary>
     private static readonly Dictionary<PostProcessEffectSettings, (bool Active, bool Value)> _originalActive = new();
+
+    /// <summary>
+    /// Captured stock <c>QualitySettings</c> values for the [Quality]
+    /// overrides, keyed by setting name. Present only while that setting is
+    /// overridden this session; removed on restore so a later override
+    /// recaptures the (possibly changed) stock value.
+    /// </summary>
+    private static readonly Dictionary<string, object> _qualityOriginals = new();
 
     /// <summary>
     /// Logs the schedule line, then stores label + due time. A newer Request
@@ -135,7 +144,8 @@ internal static class Sweeper
                 ["VolumetricFog"] = 0,
                 ["planar"] = 0,
                 ["aura"] = 0,
-                ["aa"] = 0
+                ["aa"] = 0,
+                ["quality"] = 0
             };
 
             // Settings group (spec §4.1): own try/catch — a failure warns and
@@ -255,7 +265,17 @@ internal static class Sweeper
                 GfxConfig.LogSource?.LogWarning($"[GFXConf] aa sweep failed (scene={sceneLabel}): {ex}");
             }
 
-            var summary = $"[GFXConf] scene={sceneLabel}: AO={counts["AmbientOcclusion"]}, CA={counts["ChromaticAberration"]}, DoF={counts["DepthOfField"]}, SSR={counts["ScreenSpaceReflections"]}, MB={counts["MotionBlur"]}, Bloom={counts["Bloom"]}, SCPE.Fog={counts["Fog"]}, SCPE.CloudShadows={counts["CloudShadows"]}, SCPE.AO2D={counts["AmbientOcclusion2D"]}, SCPE.Blur={counts["Blur"]}, SCPE.Sharpen={counts["Sharpen"]}, VolumetricFog={counts["VolumetricFog"]}, planar={counts["planar"]}, aura={counts["aura"]}, aa={counts["aa"]}";
+            // Quality overrides (v0.4.0): own try/catch.
+            try
+            {
+                ApplyQualityOverrides(counts);
+            }
+            catch (Exception ex)
+            {
+                GfxConfig.LogSource?.LogWarning($"[GFXConf] quality sweep failed (scene={sceneLabel}): {ex}");
+            }
+
+            var summary = $"[GFXConf] scene={sceneLabel}: AO={counts["AmbientOcclusion"]}, CA={counts["ChromaticAberration"]}, DoF={counts["DepthOfField"]}, SSR={counts["ScreenSpaceReflections"]}, MB={counts["MotionBlur"]}, Bloom={counts["Bloom"]}, SCPE.Fog={counts["Fog"]}, SCPE.CloudShadows={counts["CloudShadows"]}, SCPE.AO2D={counts["AmbientOcclusion2D"]}, SCPE.Blur={counts["Blur"]}, SCPE.Sharpen={counts["Sharpen"]}, VolumetricFog={counts["VolumetricFog"]}, planar={counts["planar"]}, aura={counts["aura"]}, aa={counts["aa"]}, quality={counts["quality"]}";
             GfxConfig.LogSource?.LogInfo(summary);
         }
         catch (Exception ex)
@@ -479,6 +499,154 @@ internal static class Sweeper
                 fastMode = null;
                 return false;
         }
+    }
+
+    /// <summary>
+    /// Applies the four [Quality] overrides (spec §4.2, v0.4.0). Each setting
+    /// is independent: "KeepOriginal" (or empty) restores the captured stock
+    /// value and drops the override; otherwise the value is parsed and, on
+    /// first application, the stock QualitySettings value is captured so a
+    /// later restore is exact. Invalid values log one warning and are skipped.
+    /// The active-override count is written into <c>counts["quality"]</c>.
+    /// </summary>
+    private static void ApplyQualityOverrides(Dictionary<string, int> counts)
+    {
+        var active = 0;
+        active += ApplyShadowDistance() ? 1 : 0;
+        active += ApplyShadowResolution() ? 1 : 0;
+        active += ApplyLodBias() ? 1 : 0;
+        active += ApplyMsaa() ? 1 : 0;
+        counts["quality"] = active;
+    }
+
+    private static bool ApplyShadowDistance()
+    {
+        var value = GfxConfig.ShadowDistance?.Value;
+        if (IsKeepOriginal(value))
+        {
+            RestoreQuality("ShadowDistance");
+            return false;
+        }
+
+        if (!float.TryParse(value.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out var distance))
+        {
+            GfxConfig.LogSource?.LogWarning($"[GFXConf] invalid ShadowDistance: {value}");
+            return false;
+        }
+
+        CaptureAndLog("ShadowDistance", QualitySettings.shadowDistance, distance.ToString(CultureInfo.InvariantCulture));
+        QualitySettings.shadowDistance = distance;
+        return true;
+    }
+
+    private static bool ApplyShadowResolution()
+    {
+        var value = GfxConfig.ShadowResolution?.Value;
+        if (IsKeepOriginal(value))
+        {
+            RestoreQuality("ShadowResolution");
+            return false;
+        }
+
+        if (!Enum.TryParse(value.Trim(), true, out ShadowResolution resolution))
+        {
+            GfxConfig.LogSource?.LogWarning($"[GFXConf] invalid ShadowResolution: {value}");
+            return false;
+        }
+
+        CaptureAndLog("ShadowResolution", QualitySettings.shadowResolution, resolution.ToString());
+        QualitySettings.shadowResolution = resolution;
+        return true;
+    }
+
+    private static bool ApplyLodBias()
+    {
+        var value = GfxConfig.LodBias?.Value;
+        if (IsKeepOriginal(value))
+        {
+            RestoreQuality("LodBias");
+            return false;
+        }
+
+        if (!float.TryParse(value.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out var bias))
+        {
+            GfxConfig.LogSource?.LogWarning($"[GFXConf] invalid LodBias: {value}");
+            return false;
+        }
+
+        CaptureAndLog("LodBias", QualitySettings.lodBias, bias.ToString(CultureInfo.InvariantCulture));
+        QualitySettings.lodBias = bias;
+        return true;
+    }
+
+    private static bool ApplyMsaa()
+    {
+        var value = GfxConfig.MSAA?.Value;
+        if (IsKeepOriginal(value))
+        {
+            RestoreQuality("MSAA");
+            return false;
+        }
+
+        if (!int.TryParse(value.Trim(), out var msaa) || (msaa != 0 && msaa != 2 && msaa != 4 && msaa != 8))
+        {
+            GfxConfig.LogSource?.LogWarning($"[GFXConf] invalid MSAA: {value}");
+            return false;
+        }
+
+        CaptureAndLog("MSAA", QualitySettings.antiAliasing, msaa.ToString(CultureInfo.InvariantCulture));
+        QualitySettings.antiAliasing = msaa;
+        return true;
+    }
+
+    /// <summary>True when a [Quality] value means "leave the game default alone".</summary>
+    private static bool IsKeepOriginal(string value)
+    {
+        return string.IsNullOrWhiteSpace(value)
+            || string.Equals(value.Trim(), "KeepOriginal", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Captures the stock value on the FIRST application of an override (so a
+    /// later KeepOriginal restores it exactly) and logs the applied value
+    /// exactly once per session per setting — no per-sweep spam.
+    /// </summary>
+    private static void CaptureAndLog(string key, object original, string applied)
+    {
+        if (_qualityOriginals.ContainsKey(key))
+        {
+            return;
+        }
+
+        _qualityOriginals[key] = original;
+        GfxConfig.LogSource?.LogInfo($"[GFXConf] quality override: {key}={applied}");
+    }
+
+    /// <summary>Restores the captured stock value for <paramref name="key"/> and forgets it.</summary>
+    private static void RestoreQuality(string key)
+    {
+        if (!_qualityOriginals.TryGetValue(key, out var original))
+        {
+            return;
+        }
+
+        switch (key)
+        {
+            case "ShadowDistance":
+                QualitySettings.shadowDistance = (float)original;
+                break;
+            case "ShadowResolution":
+                QualitySettings.shadowResolution = (ShadowResolution)original;
+                break;
+            case "LodBias":
+                QualitySettings.lodBias = (float)original;
+                break;
+            case "MSAA":
+                QualitySettings.antiAliasing = (int)original;
+                break;
+        }
+
+        _qualityOriginals.Remove(key);
     }
 
     /// <summary>
