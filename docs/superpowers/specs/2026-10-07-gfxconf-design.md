@@ -114,7 +114,9 @@ at `<game>/BepInEx/config/gfxconf.cfg` — source of truth. In-game F10 overlay
 5. F10 overlay: controls the existing interactive settings; on change →
    `ConfigFile.Save()` + immediate sweep (effects flip live). The `[Quality]`
    overrides are cycle buttons; `EnableSceneSuppression` is a toggle that
-   immediately re-evaluates suppression. The scene allowlist and
+   immediately re-evaluates suppression. `Disable…` switches are shown with
+   positive polarity (`Enable <effect>`, checkbox = enabled) — only the label
+   and the box state differ from the stored key. The scene allowlist and
    capture-hotkey entries remain config-file-only, not F10 text controls.
 
 ### 4.2 Config schema (defaults)
