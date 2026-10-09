@@ -50,6 +50,8 @@ Key interop assemblies referenced by the plugin:
 | `sc.posteffects.runtime.dll` | SCPE effects (Fog, CloudShadows, AO2D, Blur, Sharpen…) |
 | `Assembly-CSharp.dll` / `Assembly-CSharp-firstpass.dll` | `VolumetricFog`, Ceto `PlanarReflection`, game code |
 | `Aura2_Core.dll` | Aura2 (future-proof, 0 instances) |
+| `UnityEngine.ScreenCaptureModule.dll` | Frozen scene snapshot capture |
+| `UnityEngine.UIModule.dll` / `UnityEngine.UI.dll` | Canvas and `RawImage` snapshot display |
 
 ## 4. Repository layout
 

@@ -47,6 +47,18 @@
       <HintPath>$(GameDir)\BepInEx\interop\UnityEngine.TextRenderingModule.dll</HintPath>
       <Private>false</Private>
     </Reference>
+    <Reference Include="UnityEngine.UIModule">
+      <HintPath>$(GameDir)\BepInEx\interop\UnityEngine.UIModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.UI">
+      <HintPath>$(GameDir)\BepInEx\interop\UnityEngine.UI.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.ScreenCaptureModule">
+      <HintPath>$(GameDir)\BepInEx\interop\UnityEngine.ScreenCaptureModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
     <!-- Note: UnityEngine.SceneManagementModule.dll does not exist in this
          game's interop folder; SceneManagement types (SceneManager,
          LoadSceneMode, ...) are defined in UnityEngine.CoreModule.dll. -->

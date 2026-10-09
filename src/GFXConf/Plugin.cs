@@ -11,6 +11,7 @@ public class Plugin : BasePlugin
     // Strong reference so the managed handler cannot be collected while the
     // native side holds only the converted il2cpp delegate (Review Focus 1).
     private static Action<Scene, LoadSceneMode> _sceneLoadedHandler;
+    private static Action<Scene> _sceneUnloadedHandler;
 
     public override void Load()
     {
@@ -25,6 +26,9 @@ public class Plugin : BasePlugin
 
             GfxBehaviour.EnsureCreated();
 
+            var loadedSubscribed = false;
+            var unloadedSubscribed = false;
+
             // Review Focus 1: this interop exposes NO .NET events — the
             // subscription is a direct add_sceneLoaded(UnityAction) call, and
             // the managed→il2cpp delegate conversion inside it
@@ -35,11 +39,25 @@ public class Plugin : BasePlugin
             {
                 _sceneLoadedHandler = OnSceneLoaded;
                 SceneManager.add_sceneLoaded(_sceneLoadedHandler);
+                loadedSubscribed = true;
             }
             catch (Exception ex)
             {
                 Log.LogWarning($"[GFXConf] sceneLoaded subscribe failed: {ex}");
             }
+
+            try
+            {
+                _sceneUnloadedHandler = OnSceneUnloaded;
+                SceneManager.add_sceneUnloaded(_sceneUnloadedHandler);
+                unloadedSubscribed = true;
+            }
+            catch (Exception ex)
+            {
+                Log.LogWarning($"[GFXConf] sceneUnloaded subscribe failed: {ex}");
+            }
+
+            GfxBehaviour.InitializeSceneSuppression(loadedSubscribed && unloadedSubscribed);
 
             Sweeper.Request("startup", GfxConfig.DelaySeconds.Value);
         }
@@ -65,6 +83,7 @@ public class Plugin : BasePlugin
             // the first scene transition (proven in testing) — re-ensure the
             // pump once the load has completed.
             GfxBehaviour.EnsureCreated();
+            GfxBehaviour.OnSceneLoaded(scene);
 
             if (!GfxConfig.ReapplyOnSceneLoad.Value)
             {
@@ -79,6 +98,18 @@ public class Plugin : BasePlugin
         catch (Exception ex)
         {
             Log.LogWarning($"[GFXConf] sceneLoaded handler failed: {ex}");
+        }
+    }
+
+    private void OnSceneUnloaded(Scene scene)
+    {
+        try
+        {
+            GfxBehaviour.OnSceneUnloaded(scene);
+        }
+        catch (Exception ex)
+        {
+            Log.LogWarning($"[GFXConf] sceneUnloaded handler failed: {ex}");
         }
     }
 }

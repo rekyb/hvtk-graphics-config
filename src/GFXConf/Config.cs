@@ -4,6 +4,7 @@ using System.IO;
 using BepInEx;
 using BepInEx.Configuration;
 using BepInEx.Logging;
+using UnityEngine;
 
 namespace GFXConf;
 
@@ -50,6 +51,10 @@ internal static class GfxConfig
     internal static ConfigEntry<int> DelaySeconds;
     internal static ConfigEntry<bool> EnableF10Overlay;
 
+    // [Scenes] — intentionally config-file-only; the allowlist is not a text field in the F10 overlay.
+    internal static ConfigEntry<string> SceneSuppressionAllowlist;
+    internal static ConfigEntry<KeyCode> CaptureSceneHotkey;
+
     /// <summary>
     /// Toggle entries keyed by the concrete settings type name, for the PPv2
     /// and SCPE sweep groups. The 3 Volumetrics toggles are component groups
@@ -59,7 +64,7 @@ internal static class GfxConfig
         = new Dictionary<string, ConfigEntry<bool>>();
 
     /// <summary>
-    /// Binds all 18 entries to &lt;game&gt;/BepInEx/config/gfxconf.cfg and saves
+    /// Binds all entries to &lt;game&gt;/BepInEx/config/gfxconf.cfg and saves
     /// so every key exists on disk after first run. Never throws — a failed
     /// bind logs one warning and leaves the entry on its BepInEx default path.
     /// </summary>
@@ -89,8 +94,14 @@ internal static class GfxConfig
             OverrideMode = File.Bind("Antialiasing", nameof(OverrideMode), "KeepOriginal", "PostProcessLayer antialiasing override: KeepOriginal (default) or None | FastFXAA | FXAA | SMAA | TAA - FXAA and FastFXAA both use this build's single FastApproximateAntialiasing mode (FastFXAA enables fastMode).");
 
             ReapplyOnSceneLoad = File.Bind("General", nameof(ReapplyOnSceneLoad), true, "Re-run the effect sweep after each scene load.");
-            DelaySeconds = File.Bind("General", nameof(DelaySeconds), 2, "Seconds to wait after a scene load before the sweep runs.");
+            DelaySeconds = File.Bind("General", nameof(DelaySeconds), 2, "Seconds to wait after a scene load before the sweep runs and idle-scene capture begins.");
             EnableF10Overlay = File.Bind("General", nameof(EnableF10Overlay), true, "Enable the F10 in-game settings overlay.");
+
+            SceneSuppressionAllowlist = File.Bind("Scenes", nameof(SceneSuppressionAllowlist),
+                "SS_Farmland, SS_City_Market, SS_City_Street",
+                "Comma-separated runtime scene names where 3D rendering is suppressed. Edit in gfxconf.cfg; use F9 only in confirmed idle scenes.");
+            CaptureSceneHotkey = File.Bind("Scenes", nameof(CaptureSceneHotkey), KeyCode.F9,
+                "Add the most recently loaded scene to SceneSuppressionAllowlist. Use only in a confirmed idle scene.");
 
             SettingToggles = new Dictionary<string, ConfigEntry<bool>>
             {
@@ -115,16 +126,62 @@ internal static class GfxConfig
         }
     }
 
-    /// <summary>Persists the config file (overlay edits). Never throws.</summary>
-    internal static void Save()
+    /// <summary>Persists the config file; returns false on unavailable config or save failure. Never throws.</summary>
+    internal static bool Save()
     {
         try
         {
-            File?.Save();
+            if (File == null)
+            {
+                return false;
+            }
+
+            File.Save();
+            return true;
         }
         catch (Exception ex)
         {
             LogSource?.LogWarning($"[GFXConf] config save failed: {ex}");
+            return false;
         }
+    }
+
+    /// <summary>
+    /// Parses a comma-separated scene-name list, preserving first occurrence
+    /// order for config serialization while matching duplicates case-insensitively.
+    /// </summary>
+    internal static List<string> ParseSceneSuppressionAllowlist(string value)
+    {
+        var scenes = new List<string>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var item in (value ?? string.Empty).Split(','))
+        {
+            var scene = item.Trim();
+            if (scene.Length > 0 && seen.Add(scene))
+            {
+                scenes.Add(scene);
+            }
+        }
+
+        return scenes;
+    }
+
+    internal static bool IsSceneSuppressionEligible(IEnumerable<string> loadedSceneNames, string allowlistValue)
+    {
+        if (loadedSceneNames == null)
+        {
+            return false;
+        }
+
+        var allowed = new HashSet<string>(ParseSceneSuppressionAllowlist(allowlistValue), StringComparer.OrdinalIgnoreCase);
+        foreach (var sceneName in loadedSceneNames)
+        {
+            if (!string.IsNullOrWhiteSpace(sceneName) && allowed.Contains(sceneName.Trim()))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 }
