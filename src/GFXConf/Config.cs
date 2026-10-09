@@ -94,7 +94,7 @@ internal static class GfxConfig
             OverrideMode = File.Bind("Antialiasing", nameof(OverrideMode), "KeepOriginal", "PostProcessLayer antialiasing override: KeepOriginal (default) or None | FastFXAA | FXAA | SMAA | TAA - FXAA and FastFXAA both use this build's single FastApproximateAntialiasing mode (FastFXAA enables fastMode).");
 
             ReapplyOnSceneLoad = File.Bind("General", nameof(ReapplyOnSceneLoad), true, "Re-run the effect sweep after each scene load.");
-            DelaySeconds = File.Bind("General", nameof(DelaySeconds), 2, "Seconds to wait after a scene load before the sweep runs.");
+            DelaySeconds = File.Bind("General", nameof(DelaySeconds), 2, "Seconds to wait after a scene load before the sweep runs and idle-scene capture begins.");
             EnableF10Overlay = File.Bind("General", nameof(EnableF10Overlay), true, "Enable the F10 in-game settings overlay.");
 
             SceneSuppressionAllowlist = File.Bind("Scenes", nameof(SceneSuppressionAllowlist),

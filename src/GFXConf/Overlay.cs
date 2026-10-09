@@ -1,6 +1,10 @@
 using System;
+using System.Collections.Generic;
 using BepInEx.Configuration;
 using UnityEngine;
+using UnityEngine.Rendering.PostProcessing;
+using UnityEngine.SceneManagement;
+using UnityEngine.UI;
 
 namespace GFXConf;
 
@@ -8,10 +12,10 @@ namespace GFXConf;
 /// Hidden IL2CPP-injected pump component on a DontDestroyOnLoad GameObject.
 /// Owns the plugin's per-frame work: <c>Update()</c> ticks the sweep
 /// scheduler (spec §4.1) and toggles the F10 overlay; <c>OnGUI()</c> draws
-/// the overlay window — one control per §4.2 config entry, grouped by
-/// section. The GUI only reads/writes <see cref="GfxConfig"/> entries: on
-/// any change it saves the cfg and schedules an immediate sweep (spec §4.1
-/// step 4). Drawing costs nothing while the overlay is closed.
+/// the overlay window — one control per overlay-editable §4.2 entry, grouped by
+/// section. Scene settings remain config-file-only. The GUI only reads/writes
+/// <see cref="GfxConfig"/> entries: on any change it saves the cfg and schedules
+/// an immediate sweep (spec §4.1 step 4). Drawing costs nothing while closed.
 /// </summary>
 internal sealed class GfxBehaviour : MonoBehaviour
 {
@@ -51,6 +55,35 @@ internal sealed class GfxBehaviour : MonoBehaviour
     /// a persistent failure must not warn every frame (rules §2.3).
     /// </summary>
     private static bool _f10Broken;
+
+    // Scene suppression is event-driven; Update waits for DelaySeconds, then
+    // completes the one-rendered-frame capture and polls the user capture key.
+    private static bool _sceneTrackingAvailable;
+    private static bool _sceneSuppressionBroken;
+    private static bool _sceneSuppressionActive;
+    private static float _nextSuppressionReconcileTime;
+    private static bool _snapshotDelayPending;
+    private static float _snapshotReadyTime;
+    private static bool _snapshotCapturePending;
+    private static int _snapshotRenderFramesRemaining;
+    // Temporary QA check: verify the game preserves camera masks after activation.
+    private static bool _cameraMaskCheckPending;
+    private static float _cameraMaskCheckReadyTime;
+    private static bool _snapshotOverlayVisibilitySaved;
+    private static bool _snapshotOverlayWasVisible;
+    private static bool _captureHotkeyBroken;
+    private static readonly Dictionary<int, string> _loadedSceneNames = new();
+    private static readonly List<int> _sceneLoadOrder = new();
+    private static string _lastLoadedSceneName;
+    private static readonly HashSet<string> _activeAllowedScenes = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly List<Canvas> _captureCanvases = new();
+    private static readonly List<bool> _captureCanvasStates = new();
+    private static readonly List<Camera> _suppressedCameras = new();
+    private static readonly List<int> _originalCameraMasks = new();
+    private static readonly List<PostProcessLayer> _suppressedPostProcessLayers = new();
+    private static readonly List<bool> _originalPostProcessStates = new();
+    private static GameObject _snapshotCanvas;
+    private static Texture2D _snapshotTexture;
 
     /// <summary>
     /// Default panel geometry for the fallback path (size is fixed per
@@ -154,6 +187,70 @@ internal sealed class GfxBehaviour : MonoBehaviour
             GfxConfig.LogSource?.LogWarning($"[GFXConf] pump tick failed: {ex}");
         }
 
+        if (_snapshotDelayPending)
+        {
+            try
+            {
+                if (Time.realtimeSinceStartup >= _snapshotReadyTime)
+                {
+                    _snapshotDelayPending = false;
+                    BeginSnapshotCapture();
+                }
+            }
+            catch (Exception ex)
+            {
+                DisableSceneSuppression($"snapshot delay failed: {ex.Message}");
+            }
+        }
+
+        if (_snapshotCapturePending)
+        {
+            if (_snapshotRenderFramesRemaining > 0)
+            {
+                _snapshotRenderFramesRemaining--;
+            }
+            else
+            {
+                CompleteSnapshotCapture();
+            }
+        }
+
+        if (_cameraMaskCheckPending)
+        {
+            try
+            {
+                if (Time.realtimeSinceStartup >= _cameraMaskCheckReadyTime)
+                {
+                    _cameraMaskCheckPending = false;
+                    LogCurrentCameraMasks();
+                }
+            }
+            catch (Exception ex)
+            {
+                _cameraMaskCheckPending = false;
+                GfxConfig.LogSource?.LogWarning($"[GFXConf] camera mask audit failed: {ex.Message}");
+            }
+        }
+
+        if (_sceneSuppressionActive)
+        {
+            try
+            {
+                var now = Time.realtimeSinceStartup;
+                if (now >= _nextSuppressionReconcileTime)
+                {
+                    _nextSuppressionReconcileTime = now + 1f;
+                    ReconcileSceneSuppression();
+                }
+            }
+            catch (Exception ex)
+            {
+                GfxConfig.LogSource?.LogWarning($"[GFXConf] scene suppression reconciliation failed: {ex.Message}");
+            }
+        }
+
+        HandleSceneCaptureHotkey();
+
         // F10 toggle (contract amendment — gate exempts CLOSING): the key is
         // ALWAYS read (no gate before GetKeyDown). An open overlay closes on
         // F10 regardless of EnableF10Overlay, so unchecking the toggle while
@@ -191,6 +288,748 @@ internal sealed class GfxBehaviour : MonoBehaviour
             _f10Broken = true;
             GfxConfig.LogSource?.LogWarning($"[GFXConf] F10 handling disabled: {ex}");
         }
+    }
+
+    private static void HandleSceneCaptureHotkey()
+    {
+        if (_captureHotkeyBroken)
+        {
+            return;
+        }
+
+        try
+        {
+            var hotkey = GfxConfig.CaptureSceneHotkey;
+            if (hotkey != null && hotkey.Value != KeyCode.None
+                && UnityEngine.Input.GetKeyDown(hotkey.Value))
+            {
+                CaptureLatestSceneToAllowlist();
+            }
+        }
+        catch (Exception ex)
+        {
+            _captureHotkeyBroken = true;
+            GfxConfig.LogSource?.LogWarning($"[GFXConf] scene capture hotkey disabled: {ex}");
+        }
+    }
+
+    private static void CaptureLatestSceneToAllowlist()
+    {
+        try
+        {
+            if (!_sceneTrackingAvailable || _sceneSuppressionBroken)
+            {
+                GfxConfig.LogSource?.LogInfo("[GFXConf] scene capture skipped: scene tracking unavailable");
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(_lastLoadedSceneName))
+            {
+                GfxConfig.LogSource?.LogInfo("[GFXConf] scene capture skipped: no tracked loaded scene");
+                return;
+            }
+
+            var entry = GfxConfig.SceneSuppressionAllowlist;
+            if (entry == null)
+            {
+                GfxConfig.LogSource?.LogWarning("[GFXConf] scene capture skipped: allowlist config unavailable");
+                return;
+            }
+
+            var scenes = GfxConfig.ParseSceneSuppressionAllowlist(entry.Value);
+            var sceneName = _lastLoadedSceneName.Trim();
+            foreach (var listed in scenes)
+            {
+                if (string.Equals(listed, sceneName, StringComparison.OrdinalIgnoreCase))
+                {
+                    GfxConfig.LogSource?.LogInfo($"[GFXConf] scene capture skipped: already allowed '{sceneName}'");
+                    return;
+                }
+            }
+
+            var previousValue = entry.Value;
+            scenes.Add(sceneName);
+            entry.Value = string.Join(", ", scenes);
+            if (!GfxConfig.Save())
+            {
+                entry.Value = previousValue;
+                GfxConfig.LogSource?.LogWarning($"[GFXConf] scene capture not saved: '{sceneName}'");
+                return;
+            }
+
+            GfxConfig.LogSource?.LogInfo($"[GFXConf] scene added to allowlist: '{sceneName}'");
+            EvaluateSceneSuppression();
+        }
+        catch (Exception ex)
+        {
+            GfxConfig.LogSource?.LogWarning($"[GFXConf] scene capture failed: {ex}");
+        }
+    }
+
+    internal static void InitializeSceneSuppression(bool trackingAvailable)
+    {
+        try
+        {
+            _sceneTrackingAvailable = trackingAvailable;
+            if (!trackingAvailable)
+            {
+                DisableSceneSuppression("scene event subscription unavailable");
+                return;
+            }
+
+            _loadedSceneNames.Clear();
+            _sceneLoadOrder.Clear();
+            _lastLoadedSceneName = null;
+            for (var i = 0; i < SceneManager.sceneCount; i++)
+            {
+                var scene = SceneManager.GetSceneAt(i);
+                if (scene.isLoaded)
+                {
+                    TrackLoadedScene(scene);
+                }
+            }
+
+            EvaluateSceneSuppression();
+        }
+        catch (Exception ex)
+        {
+            DisableSceneSuppression($"initial scene scan failed: {ex.Message}");
+        }
+    }
+
+    internal static void OnSceneLoaded(Scene scene)
+    {
+        try
+        {
+            if (!_sceneTrackingAvailable || _sceneSuppressionBroken)
+            {
+                return;
+            }
+
+            TrackLoadedScene(scene);
+            EvaluateSceneSuppression();
+        }
+        catch (Exception ex)
+        {
+            DisableSceneSuppression($"sceneLoaded tracking failed: {ex.Message}");
+        }
+    }
+
+    internal static void OnSceneUnloaded(Scene scene)
+    {
+        try
+        {
+            if (!_sceneTrackingAvailable || _sceneSuppressionBroken)
+            {
+                return;
+            }
+
+            var handle = scene.handle;
+            _loadedSceneNames.Remove(handle);
+            _sceneLoadOrder.Remove(handle);
+            RefreshLastLoadedSceneName();
+            EvaluateSceneSuppression();
+        }
+        catch (Exception ex)
+        {
+            DisableSceneSuppression($"sceneUnloaded tracking failed: {ex.Message}");
+        }
+    }
+
+    private static void TrackLoadedScene(Scene scene)
+    {
+        var handle = scene.handle;
+        _loadedSceneNames[handle] = scene.name;
+        _sceneLoadOrder.Remove(handle);
+        _sceneLoadOrder.Add(handle);
+        _lastLoadedSceneName = scene.name;
+    }
+
+    private static void RefreshLastLoadedSceneName()
+    {
+        _lastLoadedSceneName = null;
+        for (var i = _sceneLoadOrder.Count - 1; i >= 0; i--)
+        {
+            if (_loadedSceneNames.TryGetValue(_sceneLoadOrder[i], out var sceneName))
+            {
+                _lastLoadedSceneName = sceneName;
+                return;
+            }
+        }
+    }
+
+    private static void EvaluateSceneSuppression()
+    {
+        try
+        {
+            if (!_sceneTrackingAvailable || _sceneSuppressionBroken)
+            {
+                return;
+            }
+
+            var allowlist = GfxConfig.SceneSuppressionAllowlist?.Value;
+            if (!GfxConfig.IsSceneSuppressionEligible(_loadedSceneNames.Values, allowlist))
+            {
+                RestoreSceneSuppression("no allowlisted scene loaded");
+                return;
+            }
+
+            var allowlistedScenes = new HashSet<string>(
+                GfxConfig.ParseSceneSuppressionAllowlist(allowlist),
+                StringComparer.OrdinalIgnoreCase);
+            var currentTargets = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var sceneName in _loadedSceneNames.Values)
+            {
+                if (allowlistedScenes.Contains(sceneName))
+                {
+                    currentTargets.Add(sceneName);
+                }
+            }
+
+            if ((_sceneSuppressionActive || _snapshotDelayPending || _snapshotCapturePending)
+                && _activeAllowedScenes.SetEquals(currentTargets))
+            {
+                return;
+            }
+
+            if (_sceneSuppressionActive || _snapshotDelayPending || _snapshotCapturePending || _snapshotCanvas != null)
+            {
+                RestoreSceneSuppression("allowlisted scene set changed");
+            }
+
+            _activeAllowedScenes.Clear();
+            _activeAllowedScenes.UnionWith(currentTargets);
+            _snapshotReadyTime = Time.realtimeSinceStartup + Math.Max(0, GfxConfig.DelaySeconds?.Value ?? 2);
+            _snapshotDelayPending = true;
+        }
+        catch (Exception ex)
+        {
+            DisableSceneSuppression($"eligibility evaluation failed: {ex.Message}");
+        }
+    }
+
+    private static void BeginSnapshotCapture()
+    {
+        try
+        {
+            RestoreCaptureCanvases();
+            DestroySnapshotDisplay();
+            _snapshotOverlayWasVisible = _visible;
+            _snapshotOverlayVisibilitySaved = true;
+            _visible = false;
+
+            var found = UnityEngine.Object.FindObjectsOfType(
+                Il2CppInterop.Runtime.Il2CppType.From(typeof(Canvas)));
+            if (found != null)
+            {
+                foreach (var obj in found)
+                {
+                    if (obj == null)
+                    {
+                        continue;
+                    }
+
+                    var canvas = obj as Canvas
+                        ?? (Activator.CreateInstance(typeof(Canvas), obj.Pointer) as Canvas);
+                    if (canvas == null || canvas.renderMode != RenderMode.ScreenSpaceOverlay)
+                    {
+                        continue;
+                    }
+
+                    _captureCanvases.Add(canvas);
+                    _captureCanvasStates.Add(canvas.enabled);
+                    if (canvas.enabled)
+                    {
+                        canvas.enabled = false;
+                    }
+                }
+            }
+
+            _snapshotRenderFramesRemaining = 1;
+            _snapshotCapturePending = true;
+        }
+        catch (Exception ex)
+        {
+            _snapshotCapturePending = false;
+            _snapshotRenderFramesRemaining = 0;
+            RestoreCaptureCanvases();
+            DestroySnapshotDisplay();
+            _activeAllowedScenes.Clear();
+            GfxConfig.LogSource?.LogWarning($"[GFXConf] scene snapshot setup failed; rendering remains active: {ex}");
+        }
+    }
+
+    private static void CompleteSnapshotCapture()
+    {
+        _snapshotCapturePending = false;
+        _snapshotRenderFramesRemaining = 0;
+        try
+        {
+            _snapshotTexture = ScreenCapture.CaptureScreenshotAsTexture();
+            if (_snapshotTexture == null)
+            {
+                throw new InvalidOperationException("CaptureScreenshotAsTexture returned null");
+            }
+
+            var width = _snapshotTexture.width;
+            var height = _snapshotTexture.height;
+            CreateSnapshotDisplay();
+            ApplySceneSuppression();
+            _sceneSuppressionActive = true;
+            _nextSuppressionReconcileTime = Time.realtimeSinceStartup + 1f;
+            _cameraMaskCheckReadyTime = Time.realtimeSinceStartup + 1f;
+            _cameraMaskCheckPending = true;
+            GfxConfig.LogSource?.LogInfo(
+                $"[GFXConf] scene suppression active: targets={string.Join(",", _activeAllowedScenes)} " +
+                $"snapshot={width}x{height} cameras={_suppressedCameras.Count} " +
+                $"ppLayers={_suppressedPostProcessLayers.Count}");
+        }
+        catch (Exception ex)
+        {
+            RestoreRenderState();
+            DestroySnapshotDisplay();
+            _sceneSuppressionActive = false;
+            _activeAllowedScenes.Clear();
+            GfxConfig.LogSource?.LogWarning($"[GFXConf] scene snapshot failed; rendering remains active: {ex}");
+        }
+        finally
+        {
+            RestoreCaptureCanvases();
+        }
+    }
+
+    private static void LogCurrentCameraMasks()
+    {
+        try
+        {
+            var cameras = UnityEngine.Object.FindObjectsOfType(
+                Il2CppInterop.Runtime.Il2CppType.From(typeof(Camera)));
+            if (cameras == null)
+            {
+                throw new InvalidOperationException("Camera query returned null");
+            }
+
+            var total = 0;
+            var zeroMask = 0;
+            foreach (var obj in cameras)
+            {
+                if (obj == null)
+                {
+                    continue;
+                }
+
+                var camera = obj as Camera
+                    ?? (Activator.CreateInstance(typeof(Camera), obj.Pointer) as Camera);
+                if (camera == null)
+                {
+                    continue;
+                }
+
+                total++;
+                if (camera.cullingMask == 0)
+                {
+                    zeroMask++;
+                }
+            }
+
+            GfxConfig.LogSource?.LogInfo(
+                $"[GFXConf] camera mask audit: tracked={_suppressedCameras.Count} " +
+                $"current={total} zero={zeroMask} nonzero={total - zeroMask}");
+        }
+        catch (Exception ex)
+        {
+            GfxConfig.LogSource?.LogWarning($"[GFXConf] camera mask audit failed: {ex.Message}");
+        }
+    }
+
+    private static void CreateSnapshotDisplay()
+    {
+        var minimumSortingOrder = 0;
+        foreach (var canvas in _captureCanvases)
+        {
+            if (canvas != null)
+            {
+                minimumSortingOrder = Math.Min(minimumSortingOrder, canvas.sortingOrder);
+            }
+        }
+
+        var go = new GameObject("GFXConfFrozenFrame");
+        _snapshotCanvas = go;
+        var rect = go.AddComponent<RectTransform>();
+        var canvasDisplay = go.AddComponent<Canvas>();
+        var image = go.AddComponent<RawImage>();
+        canvasDisplay.renderMode = RenderMode.ScreenSpaceOverlay;
+        canvasDisplay.overrideSorting = true;
+        canvasDisplay.sortingOrder = minimumSortingOrder > int.MinValue
+            ? minimumSortingOrder - 1
+            : int.MinValue;
+
+        rect.anchorMin = Vector2.zero;
+        rect.anchorMax = Vector2.one;
+        rect.offsetMin = Vector2.zero;
+        rect.offsetMax = Vector2.zero;
+        image.texture = _snapshotTexture;
+        image.raycastTarget = false;
+    }
+
+    private static void ApplySceneSuppression()
+    {
+        var cameras = UnityEngine.Object.FindObjectsOfType(
+            Il2CppInterop.Runtime.Il2CppType.From(typeof(Camera)));
+        if (cameras == null)
+        {
+            throw new InvalidOperationException("Camera query returned null");
+        }
+
+        var cameraFailure = false;
+        foreach (var obj in cameras)
+        {
+            try
+            {
+                if (obj == null)
+                {
+                    continue;
+                }
+
+                var camera = obj as Camera
+                    ?? (Activator.CreateInstance(typeof(Camera), obj.Pointer) as Camera);
+                if (camera == null)
+                {
+                    continue;
+                }
+
+                var originalMask = camera.cullingMask;
+                _suppressedCameras.Add(camera);
+                _originalCameraMasks.Add(originalMask);
+                camera.cullingMask = 0;
+            }
+            catch (Exception ex)
+            {
+                cameraFailure = true;
+                GfxConfig.LogSource?.LogWarning($"[GFXConf] camera suppression failed: {ex.Message}");
+            }
+        }
+
+        if (_suppressedCameras.Count == 0)
+        {
+            throw new InvalidOperationException("No cameras were available for scene suppression");
+        }
+
+        if (cameraFailure)
+        {
+            throw new InvalidOperationException("Camera suppression incomplete; rendering restored");
+        }
+
+        var layers = UnityEngine.Object.FindObjectsOfType(
+            Il2CppInterop.Runtime.Il2CppType.From(typeof(PostProcessLayer)));
+        if (layers != null)
+        {
+            var layerFailure = false;
+            foreach (var obj in layers)
+            {
+                try
+                {
+                    if (obj == null)
+                    {
+                        continue;
+                    }
+
+                    var layer = obj as PostProcessLayer
+                        ?? (Activator.CreateInstance(typeof(PostProcessLayer), obj.Pointer) as PostProcessLayer);
+                    if (layer == null)
+                    {
+                        continue;
+                    }
+
+                    var originalEnabled = layer.enabled;
+                    _suppressedPostProcessLayers.Add(layer);
+                    _originalPostProcessStates.Add(originalEnabled);
+                    layer.enabled = false;
+                }
+                catch (Exception ex)
+                {
+                    layerFailure = true;
+                    GfxConfig.LogSource?.LogWarning($"[GFXConf] post-process suppression failed: {ex.Message}");
+                }
+            }
+
+            if (layerFailure)
+            {
+                throw new InvalidOperationException("Post-process suppression incomplete; rendering restored");
+            }
+        }
+    }
+
+    private static void ReconcileSceneSuppression()
+    {
+        try
+        {
+            var cameras = UnityEngine.Object.FindObjectsOfType(
+                Il2CppInterop.Runtime.Il2CppType.From(typeof(Camera)));
+            if (cameras == null)
+            {
+                throw new InvalidOperationException("Camera query returned null");
+            }
+
+            var addedCameras = 0;
+            var resetCameras = 0;
+            foreach (var obj in cameras)
+            {
+                try
+                {
+                    if (obj == null)
+                    {
+                        continue;
+                    }
+
+                    var camera = obj as Camera
+                        ?? (Activator.CreateInstance(typeof(Camera), obj.Pointer) as Camera);
+                    if (camera == null)
+                    {
+                        continue;
+                    }
+
+                    var tracked = IsCameraTracked(camera);
+                    var currentMask = camera.cullingMask;
+                    if (!tracked)
+                    {
+                        _suppressedCameras.Add(camera);
+                        _originalCameraMasks.Add(currentMask);
+                        addedCameras++;
+                    }
+
+                    if (currentMask != 0)
+                    {
+                        camera.cullingMask = 0;
+                        if (tracked)
+                        {
+                            resetCameras++;
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    GfxConfig.LogSource?.LogWarning($"[GFXConf] camera reconciliation failed: {ex.Message}");
+                }
+            }
+
+            var layers = UnityEngine.Object.FindObjectsOfType(
+                Il2CppInterop.Runtime.Il2CppType.From(typeof(PostProcessLayer)));
+            var addedLayers = 0;
+            var reenabledLayers = 0;
+            if (layers != null)
+            {
+                foreach (var obj in layers)
+                {
+                    try
+                    {
+                        if (obj == null)
+                        {
+                            continue;
+                        }
+
+                        var layer = obj as PostProcessLayer
+                            ?? (Activator.CreateInstance(typeof(PostProcessLayer), obj.Pointer) as PostProcessLayer);
+                        if (layer == null)
+                        {
+                            continue;
+                        }
+
+                        var tracked = IsPostProcessLayerTracked(layer);
+                        var wasEnabled = layer.enabled;
+                        if (!tracked)
+                        {
+                            _suppressedPostProcessLayers.Add(layer);
+                            _originalPostProcessStates.Add(wasEnabled);
+                            addedLayers++;
+                        }
+
+                        if (wasEnabled)
+                        {
+                            layer.enabled = false;
+                            if (tracked)
+                            {
+                                reenabledLayers++;
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        GfxConfig.LogSource?.LogWarning($"[GFXConf] post-process reconciliation failed: {ex.Message}");
+                    }
+                }
+            }
+
+            if (addedCameras > 0 || resetCameras > 0 || addedLayers > 0 || reenabledLayers > 0)
+            {
+                GfxConfig.LogSource?.LogInfo(
+                    $"[GFXConf] scene suppression reconciled: newCameras={addedCameras} " +
+                    $"resetCameras={resetCameras} newPpLayers={addedLayers} reenabledPpLayers={reenabledLayers}");
+            }
+        }
+        catch (Exception ex)
+        {
+            GfxConfig.LogSource?.LogWarning($"[GFXConf] scene suppression reconciliation failed: {ex.Message}");
+        }
+    }
+
+    private static bool IsCameraTracked(Camera candidate)
+    {
+        foreach (var tracked in _suppressedCameras)
+        {
+            if (tracked != null && tracked.Pointer == candidate.Pointer)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool IsPostProcessLayerTracked(PostProcessLayer candidate)
+    {
+        foreach (var tracked in _suppressedPostProcessLayers)
+        {
+            if (tracked != null && tracked.Pointer == candidate.Pointer)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static void RestoreSceneSuppression(string reason)
+    {
+        var hadSuppression = _sceneSuppressionActive || _snapshotDelayPending || _snapshotCapturePending
+            || _snapshotCanvas != null || _suppressedCameras.Count > 0;
+        _cameraMaskCheckPending = false;
+        _cameraMaskCheckReadyTime = 0f;
+        _nextSuppressionReconcileTime = 0f;
+        _snapshotDelayPending = false;
+        _snapshotReadyTime = 0f;
+        _snapshotCapturePending = false;
+        _snapshotRenderFramesRemaining = 0;
+        RestoreCaptureCanvases();
+        RestoreRenderState();
+        DestroySnapshotDisplay();
+        _sceneSuppressionActive = false;
+        _activeAllowedScenes.Clear();
+        if (hadSuppression)
+        {
+            GfxConfig.LogSource?.LogInfo($"[GFXConf] scene suppression restored: reason={reason}");
+        }
+    }
+
+    private static void RestoreRenderState()
+    {
+        for (var i = 0; i < _suppressedCameras.Count; i++)
+        {
+            try
+            {
+                var camera = _suppressedCameras[i];
+                if (camera != null)
+                {
+                    camera.cullingMask = _originalCameraMasks[i];
+                }
+            }
+            catch (Exception ex)
+            {
+                GfxConfig.LogSource?.LogWarning($"[GFXConf] camera restore failed: {ex.Message}");
+            }
+        }
+
+        for (var i = 0; i < _suppressedPostProcessLayers.Count; i++)
+        {
+            try
+            {
+                var layer = _suppressedPostProcessLayers[i];
+                if (layer != null)
+                {
+                    layer.enabled = _originalPostProcessStates[i];
+                }
+            }
+            catch (Exception ex)
+            {
+                GfxConfig.LogSource?.LogWarning($"[GFXConf] post-process restore failed: {ex.Message}");
+            }
+        }
+
+        _suppressedCameras.Clear();
+        _originalCameraMasks.Clear();
+        _suppressedPostProcessLayers.Clear();
+        _originalPostProcessStates.Clear();
+    }
+
+    private static void RestoreCaptureCanvases()
+    {
+        for (var i = 0; i < _captureCanvases.Count; i++)
+        {
+            try
+            {
+                var canvas = _captureCanvases[i];
+                if (canvas != null)
+                {
+                    canvas.enabled = _captureCanvasStates[i];
+                }
+            }
+            catch (Exception ex)
+            {
+                GfxConfig.LogSource?.LogWarning($"[GFXConf] UI canvas restore failed: {ex.Message}");
+            }
+        }
+
+        _captureCanvases.Clear();
+        _captureCanvasStates.Clear();
+        if (_snapshotOverlayVisibilitySaved)
+        {
+            _visible = _snapshotOverlayWasVisible;
+            _snapshotOverlayVisibilitySaved = false;
+        }
+    }
+
+    private static void DestroySnapshotDisplay()
+    {
+        try
+        {
+            if (_snapshotCanvas != null)
+            {
+                _snapshotCanvas.SetActive(false);
+                UnityEngine.Object.Destroy(_snapshotCanvas);
+            }
+        }
+        catch (Exception ex)
+        {
+            GfxConfig.LogSource?.LogWarning($"[GFXConf] snapshot display cleanup failed: {ex.Message}");
+        }
+        finally
+        {
+            _snapshotCanvas = null;
+        }
+
+        try
+        {
+            if (_snapshotTexture != null)
+            {
+                UnityEngine.Object.Destroy(_snapshotTexture);
+            }
+        }
+        catch (Exception ex)
+        {
+            GfxConfig.LogSource?.LogWarning($"[GFXConf] snapshot texture cleanup failed: {ex.Message}");
+        }
+        finally
+        {
+            _snapshotTexture = null;
+        }
+    }
+
+    private static void DisableSceneSuppression(string reason)
+    {
+        _sceneSuppressionBroken = true;
+        _sceneTrackingAvailable = false;
+        RestoreSceneSuppression("tracking unavailable");
+        GfxConfig.LogSource?.LogWarning($"[GFXConf] scene suppression disabled for session: {reason}");
     }
 
     /// <summary>
@@ -240,8 +1079,8 @@ internal sealed class GfxBehaviour : MonoBehaviour
     }
 
     /// <summary>
-    /// Fixed-panel fallback: opaque background box, the controls in a
-    /// scroll view (all 18 entries reachable at any resolution) filling the
+    /// Fixed-panel fallback: opaque background box, the 18 overlay-editable
+    /// controls in a scroll view (all reachable at any resolution) filling the
     /// panel below the header, then the title strip with the close X.
     /// Begin/EndArea and Begin/EndScrollView
     /// are protected by finally so a throwing control can never leave the
@@ -446,8 +1285,9 @@ internal sealed class GfxBehaviour : MonoBehaviour
     }
 
     /// <summary>
-    /// The scrollable controls: all 18 §4.2 entries as live controls under
-    /// their 5 section headers. No reflection — only the known
+    /// The scrollable controls: the 18 overlay-editable §4.2 entries under
+    /// their 5 section headers. Scene settings remain config-file-only. No
+    /// reflection — only the known
     /// <see cref="GfxConfig"/> entries are ever listed. A null entry (Bind
     /// failed) draws a placeholder instead of throwing. Used by both the
     /// GUILayout.Window and the panel path.
@@ -630,6 +1470,15 @@ internal sealed class GfxBehaviour : MonoBehaviour
 
     private void OnDestroy()
     {
+        try
+        {
+            RestoreSceneSuppression("behaviour destroyed");
+        }
+        catch (Exception ex)
+        {
+            GfxConfig.LogSource?.LogWarning($"[GFXConf] scene suppression teardown failed: {ex}");
+        }
+
         // Teardown while open should log the normal close transition before
         // the next sceneLoaded → EnsureCreated. Guarded: a failure must never
         // escape into the Unity teardown callback.

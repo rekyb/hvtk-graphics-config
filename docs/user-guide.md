@@ -32,9 +32,10 @@ BepInEx only ever adds new files, Steam Verify ignores extras).
 
 ## 3. In-game overlay (F10)
 
-Press **F10** in game to open the GFXConf overlay: every config key as a
-live control. The overlay does not block game input, so clicks may reach
-game UI behind it. Press **F10** again to close. The overlay can be
+Press **F10** in game to open the GFXConf overlay: each overlay-editable
+setting as a live control. Scene settings are edited in `gfxconf.cfg` only.
+The overlay does not block game input, so clicks may reach game UI behind it.
+Press **F10** again to close. The overlay can be
 **dragged by its title bar**; it snaps back to the top-left corner every
 time it is reopened.
 
@@ -54,11 +55,33 @@ time it is reopened.
 - **`OverrideMode` in the overlay is a cycle button:**
   `KeepOriginal → None → FastFXAA → FXAA → SMAA → TAA → wrap`.
 
+### Idle-scene rendering
+
+In the default tested idle scenes (`SS_Farmland`, `SS_City_Market`, and
+`SS_City_Street`), GFXConf keeps a frozen 3D snapshot behind the live
+screen-space UI and stops rendering the scene cameras. The UI stays usable; a
+brief one-frame UI blink can occur when the snapshot is captured or refreshed.
+GFXConf waits for `DelaySeconds` after an eligible scene-set change before
+capturing, so scene content and cameras can finish loading; normal rendering and
+UI remain active during this wait.
+The game uses additive scenes, so matching checks loaded scene names rather
+than only the active scene.
+
+Edit `SceneSuppressionAllowlist` in the `[Scenes]` section of `gfxconf.cfg` and
+restart to add or remove scene names. Press the configurable
+`CaptureSceneHotkey` (default **F9**) in a confirmed safe idle scene to append
+the most recently loaded scene to the allowlist and save the config. **Do not
+use F9 in a scene that needs interaction.** The veto set is empty initially;
+if an interactive scene is later reported, its exact runtime name can be added
+as a built-in veto. Until then, an interactive scene loaded alongside an
+allowlisted scene will also have its 3D suppressed.
+
 ## 4. Config reference — `BepInEx\config\gfxconf.cfg`
 
-All 18 keys, their sections, defaults and descriptions (spec §4.2
+All 20 keys, their sections, defaults and descriptions (spec §4.2
 word-for-word). The file is TOML-style; edit it with the game **closed** (or
-via the overlay) and restart for component-level changes.
+use the F10 overlay for its interactive controls) and restart for direct
+config-file changes.
 
 ### `[PPv2]` — Post Processing Stack v2 effects
 
@@ -100,8 +123,15 @@ via the overlay) and restart for component-level changes.
 | Key | Default | Description |
 |---|---|---|
 | `ReapplyOnSceneLoad` | `true` | Re-run the effect sweep after each scene load. |
-| `DelaySeconds` | `2` | Seconds to wait after a scene load before the sweep runs. |
+| `DelaySeconds` | `2` | Seconds to wait after a scene load before the sweep runs and idle-scene capture begins. |
 | `EnableF10Overlay` | `true` | Enable the F10 in-game settings overlay. |
+
+### `[Scenes]` — 3D render suppression
+
+| Key | Default | Description |
+|---|---|---|
+| `SceneSuppressionAllowlist` | `SS_Farmland, SS_City_Market, SS_City_Street` | Comma-separated runtime scene names to suppress; edit in the config file. |
+| `CaptureSceneHotkey` | `F9` | Add the most recently loaded scene to the allowlist; use only in confirmed safe idle scenes. |
 
 ## 5. Troubleshooting — reading the log
 
@@ -131,6 +161,12 @@ What to look for:
 - `[GFXConf] v0.2.0 loaded ...` — plugin loaded (banner appears once).
 - `scene=<name> sweep in <n>s` — a sweep was scheduled (on startup, on each
   scene load, or from an overlay toggle).
+- `[GFXConf] scene suppression active: targets=... snapshot=... cameras=... ppLayers=...`
+  — the configured loaded-scene set is being shown from a frozen 3D snapshot.
+- `[GFXConf] scene suppression restored: reason=...` — live 3D rendering has
+  been restored because no configured target remains or a transition failed.
+- `[GFXConf] scene added to allowlist: '<name>'` — F9 captured and saved the
+  most recently loaded scene name.
 - **One** `scene=<name>: AO=...` summary line per completed sweep, ending in
   `aa=<n>`. (At the main menu all counts are 0 — effects load with gameplay
   levels.)

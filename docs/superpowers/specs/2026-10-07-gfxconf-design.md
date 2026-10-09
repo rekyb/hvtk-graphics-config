@@ -71,9 +71,20 @@ at `<game>/BepInEx/config/gfxconf.cfg` — source of truth. In-game F10 overlay
 
 1. `Awake()`: bind config entries, log banner, run initial sweep after
    `DelaySeconds` (default 2 s).
-2. Subscribe to `UnityEngine.SceneManagement.SceneManager.sceneLoaded`
-   (IL2CPP-safe delegate) → schedule sweep for that scene after `DelaySeconds`.
-3. Sweep (single method, try/catch around each group):
+2. Subscribe to `SceneManager.sceneLoaded` and `SceneManager.sceneUnloaded`
+   with strongly-held IL2CPP delegates. Scene events always update the loaded
+   set for render suppression; `ReapplyOnSceneLoad` only gates effect sweeps.
+3. Scene suppression: match `SceneSuppressionAllowlist` against the full loaded
+   set, not the active scene. When an allowlisted name is loaded, keep normal
+   rendering and UI active for `DelaySeconds`, then capture after one rendered
+   frame with screen-space UI hidden. Restore the UI, set camera culling masks
+    to zero, and disable post-process layers. Restore original state when no
+    allowlisted scene remains. The initial veto set is empty; interactive
+    co-loaded scenes can also be suppressed until the user supplies a veto name.
+    While suppressed, reconcile cameras and post-process layers once per second
+    to catch late-created or re-enabled objects. F9 adds the latest loaded scene
+    to the allowlist and saves the config.
+4. Sweep (single method, try/catch around each group):
    - **Settings groups:** `Resources.FindObjectsOfTypeAll<PostProcessProfile>()`
      (catches shared + volume-instantiated copies). For each `profile.settings`
      entry, match concrete type name against enabled toggles → set
@@ -87,7 +98,7 @@ at `<game>/BepInEx/config/gfxconf.cfg` — source of truth. In-game F10 overlay
      `antialiasingMode`.
    - Log one summary line per sweep:
      `"[GFXConf] scene=73: AO=4, CA=4, SCPE.Fog=4, VolumetricFog=4, planar=0"`.
-4. F10 overlay: controls the existing interactive settings; on change →
+5. F10 overlay: controls the existing interactive settings; on change →
    `ConfigFile.Save()` + immediate sweep (effects flip live). Scene allowlist
    and capture-hotkey entries are config-file-only, not F10 text controls.
 
@@ -134,6 +145,12 @@ CaptureSceneHotkey = F9
 - Missing types (e.g., Aura2 stripped from a build) → log once, skip silently.
 - Null profile/settings entries → skipped.
 - Config parse failures fall back to BepInEx defaults.
+- Scene snapshot/setup failures restore captured camera, post-process, and canvas
+  state and fail open; failed scene event subscriptions disable suppression for
+  the session without disabling the existing effect sweep.
+- F9 save failures do not activate the newly captured scene.
+- A one-frame capture hides screen-space canvases (and the F10 IMGUI panel if
+  open), then restores them; the snapshot must not contain a frozen copy of UI.
 
 ## 5. Build & deploy
 
@@ -155,9 +172,13 @@ CaptureSceneHotkey = F9
 4. **AA override**: set `OverrideMode = FXAA` → summary logs layer changes;
    visual shimmer check optional.
 5. **F10 overlay**: toggle a group live → summary on next sweep reflects it.
-6. **Uninstall**: rename `BepInEx` + `winhttp.dll` → game boots stock
+6. **Idle-scene suppression**: verify the three `[Scenes]` defaults match by
+   loaded-scene name; F9 persists a newly captured safe scene; screenshot stays
+   frozen while live screen-space UI remains responsive; leaving the allowlist
+   restores original camera/post-processing values.
+7. **Uninstall**: rename `BepInEx` + `winhttp.dll` → game boots stock
    (Steam integrity untouched either way).
-7. **Crash safety**: force an exception path (temp debug flag) → game continues,
+8. **Crash safety**: force an exception path (temp debug flag) → game continues,
    warning logged.
 
 ## 7. Deliverables

@@ -95,9 +95,9 @@ configured target in the loaded set is sufficient.
 
 When suppression first becomes eligible:
 
-1. Temporarily disable enabled `ScreenSpaceOverlay` canvases for one rendered
-   frame so the screenshot contains the 3D view but not a frozen copy of live
-   screen UI.
+1. Temporarily disable enabled `ScreenSpaceOverlay` canvases and hide the F10
+   IMGUI panel if open for one rendered frame, so the screenshot contains the
+   3D view but not a frozen copy of live UI.
 2. Capture the frame with `ScreenCapture.CaptureScreenshotAsTexture()`.
 3. Restore each canvas to its prior enabled state.
 4. Display the texture using a non-raycast `RawImage` on a screen-space canvas
@@ -114,16 +114,23 @@ image. No game input system is modified.
 - On scene load or unload, recompute eligibility from the full loaded set.
 - Evaluate the already-loaded set once after config binding during plugin
   startup; do not wait for another scene event to apply an eligible default.
-- On entry to an eligible set, capture before suppressing rendering.
+- On entry to an eligible set, keep rendering and UI active for `DelaySeconds`.
+  Then hide screen-space UI for one rendered frame, capture, restore the UI, and
+  suppress rendering. The default delay is 2 seconds; the user may tune it in
+  `[General]` before launch.
 - If the set of loaded allowlisted scenes changes while still eligible,
-  restore rendering for the capture frame, refresh the image, then suppress
-  rendering again.
+  restore rendering immediately and restart the delay before refreshing the
+  image and suppressing rendering again.
+- While suppression is active, re-scan cameras and post-process layers once per
+  second. Save original state for newly found objects and reapply suppression
+  if a tracked object was re-enabled or its camera mask changed.
 - If no allowlisted scene remains, restore each saved camera mask and
   post-processing enabled state, then destroy the snapshot texture and display
   object.
 - Camera references are not retained across scene-set changes after restore.
-- Scene suppression does not depend on `ReapplyOnSceneLoad` or `DelaySeconds`;
-  it follows the loaded-scene eligibility rule directly.
+- `ReapplyOnSceneLoad` controls only the effect sweep. `DelaySeconds` also
+  controls how long scene suppression waits for scene content and cameras to
+  settle; leaving the allowlist still restores rendering immediately.
 
 ### Failure behavior
 
@@ -147,6 +154,8 @@ Logs must make it possible to verify:
 - When suppression was restored and why (target left or failure).
 - Which exact scene the capture hotkey added, or why capture was skipped.
 - Whether snapshot capture failed and normal rendering was retained.
+- A one-line reconciliation summary only when late cameras/layers are found or
+  suppression had to be reapplied.
 
 Do not add FPS/frametime logging to GFXConf. Performance verification remains a
 manual test using the throwaway probe.
@@ -160,7 +169,8 @@ manual test using the throwaway probe.
   in the existing `GfxBehaviour`; handle the capture hotkey here. Keep the
   F10 overlay draggable; do not add an allowlist text editor.
 - `src/GFXConf/GFXConf.csproj`: add only the required existing game interop
-  references for screen capture and UI texture display.
+  references for screen capture and UI texture display (`UnityEngine.ScreenCaptureModule`,
+  `UnityEngine.UIModule`, and `UnityEngine.UI`).
 - `docs/user-guide.md`: document defaults, manual scene capture, config-file
   editing, click-through behavior, and the locked-scene veto limitation.
 - This spec and the base config schema §4.2 must remain consistent.
@@ -204,7 +214,9 @@ No game DLLs, game assets, or NuGet dependencies are added or modified.
   scene and its exact runtime name is added as a veto, allowlisting another
   loaded scene can suppress it too.
 - F9 is configurable in case it conflicts with another game binding.
-- A one-frame screen-space UI blink can occur when a snapshot is captured or
-  refreshed.
+- A late-created camera or layer can render for up to one second before the
+  next reconciliation pass suppresses it.
+- A one-frame screen-space UI/F10-panel blink can occur when a snapshot is
+  captured or refreshed.
 - The frozen texture consumes memory proportional to screen resolution and is
   destroyed when suppression ends.
