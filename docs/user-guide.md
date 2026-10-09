@@ -47,18 +47,14 @@ time it is reopened.
   game runs: restarting the game re-enables those components, and the toggle
   state in `gfxconf.cfg` decides at the next launch whether they are disabled
   again.
-- **`EnableF10Overlay = false` means the overlay cannot open.** F10 is still
-  able to *close* an overlay that is already open — the gate only blocks
-  opening. To turn the overlay back on, set `EnableF10Overlay = true` in
-  `gfxconf.cfg` and restart (or re-check the toggle inside the open overlay
-  before closing it).
-- **`OverrideMode` in the overlay is a dropdown:** pick `KeepOriginal`, `None`,
-  `FastFXAA`, `FXAA`, `SMAA`, or `TAA`.
-- **`[Quality]` overrides are dropdowns** (`KeepOriginal` first), one each for
-  `ShadowDistance`, `ShadowResolution`, `LodBias`, and `MSAA`. They apply
-  live to Unity's global `QualitySettings`; choosing `KeepOriginal` restores
-  the game's original value. `ShadowDistance`, `LodBias`, and `MSAA` show a
-  short hint under the control explaining what the numeric value means.
+- **`OverrideMode` in the overlay is a cycle button:** press to step through
+  `Keep Original → None → Fast FXAA → FXAA → SMAA → TAA → wrap`.
+- **`[Quality]` overrides are cycle buttons** (`Keep Original` first), one each
+  for `ShadowDistance`, `ShadowResolution`, `LodBias`, and `MSAA`. They apply
+  live to Unity's global `QualitySettings`; choosing `Keep Original` restores
+  the game's original value. The button shows a descriptive label instead of
+  the raw value — e.g. `LodBias = Fastest` (writes `0.6`), `MSAA = 4x`
+  (writes `4`), `ShadowDistance = Quality` (writes `40`).
 - **`EnableSceneSuppression` is a live master switch** for the idle-scene
   "scene pauser". Turn it **off** to keep live 3D rendering in allowlisted
   idle scenes, and **on** to re-freeze them — no restart needed. While off,
@@ -70,9 +66,9 @@ In the default tested idle scenes (`SS_Farmland`, `SS_City_Market`, and
 `SS_City_Street`), GFXConf keeps a frozen 3D snapshot behind the live
 screen-space UI and stops rendering the scene cameras. The UI stays usable; a
 brief one-frame UI blink can occur when the snapshot is captured or refreshed.
-GFXConf waits for `DelaySeconds` after an eligible scene-set change before
-capturing, so scene content and cameras can finish loading; normal rendering and
-UI remain active during this wait.
+GFXConf waits 2 seconds after an eligible scene-set change before capturing, so
+scene content and cameras can finish loading; normal rendering and UI remain
+active during this wait.
 The game uses additive scenes, so matching checks loaded scene names rather
 than only the active scene.
 
@@ -135,14 +131,6 @@ config-file changes.
 | `ShadowResolution` | `KeepOriginal` | `Low` / `Medium` / `High` / `VeryHigh`; or `KeepOriginal`. |
 | `LodBias` | `KeepOriginal` | LOD bias as a float (lower = coarser LODs); or `KeepOriginal`. |
 | `MSAA` | `KeepOriginal` | Multisample anti-aliasing `0` / `2` / `4` / `8`; or `KeepOriginal`. |
-
-### `[General]`
-
-| Key | Default | Description |
-|---|---|---|
-| `ReapplyOnSceneLoad` | `true` | Re-run the effect sweep after each scene load. |
-| `DelaySeconds` | `2` | Seconds to wait after a scene load before the sweep runs and idle-scene capture begins. |
-| `EnableF10Overlay` | `true` | Enable the F10 in-game settings overlay. |
 
 ### `[Scenes]` — 3D render suppression
 

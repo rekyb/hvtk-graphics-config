@@ -46,10 +46,10 @@ internal static class GfxConfig
     // [Antialiasing]
     internal static ConfigEntry<string> OverrideMode;
 
-    // [General]
-    internal static ConfigEntry<bool> ReapplyOnSceneLoad;
-    internal static ConfigEntry<int> DelaySeconds;
-    internal static ConfigEntry<bool> EnableF10Overlay;
+    // The old [General] keys are gone in v0.4.0: reapply-on-scene-load and the
+    // F10 overlay are always on, and the post-scene delay is a fixed constant.
+    /// <summary>Seconds after a scene load before the sweep runs and idle-scene capture begins. Fixed at 2 s.</summary>
+    internal const int DelaySeconds = 2;
 
     // [Quality] — render-quality overrides (Built-in RP QualitySettings); KeepOriginal = no-op.
     internal static ConfigEntry<string> ShadowDistance;
@@ -101,10 +101,6 @@ internal static class GfxConfig
             DisableAura2 = File.Bind("Volumetrics", nameof(DisableAura2), true, "Disable Aura 2 components (Aura, AuraVolume, AuraCamera).");
 
             OverrideMode = File.Bind("Antialiasing", nameof(OverrideMode), "KeepOriginal", "PostProcessLayer antialiasing override: KeepOriginal (default) or None | FastFXAA | FXAA | SMAA | TAA - FXAA and FastFXAA both use this build's single FastApproximateAntialiasing mode (FastFXAA enables fastMode).");
-
-            ReapplyOnSceneLoad = File.Bind("General", nameof(ReapplyOnSceneLoad), true, "Re-run the effect sweep after each scene load.");
-            DelaySeconds = File.Bind("General", nameof(DelaySeconds), 2, "Seconds to wait after a scene load before the sweep runs and idle-scene capture begins.");
-            EnableF10Overlay = File.Bind("General", nameof(EnableF10Overlay), true, "Enable the F10 in-game settings overlay.");
 
             SceneSuppressionAllowlist = File.Bind("Scenes", nameof(SceneSuppressionAllowlist),
                 "SS_Farmland, SS_City_Market, SS_City_Street",

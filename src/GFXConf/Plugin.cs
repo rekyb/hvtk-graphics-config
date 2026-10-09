@@ -59,7 +59,7 @@ public class Plugin : BasePlugin
 
             GfxBehaviour.InitializeSceneSuppression(loadedSubscribed && unloadedSubscribed);
 
-            Sweeper.Request("startup", GfxConfig.DelaySeconds.Value);
+            Sweeper.Request("startup", GfxConfig.DelaySeconds);
         }
         catch (Exception ex)
         {
@@ -85,15 +85,10 @@ public class Plugin : BasePlugin
             GfxBehaviour.EnsureCreated();
             GfxBehaviour.OnSceneLoaded(scene);
 
-            if (!GfxConfig.ReapplyOnSceneLoad.Value)
-            {
-                return;
-            }
-
             var sceneName = scene.name;
             Sweeper.Request(
                 string.IsNullOrEmpty(sceneName) ? $"handle{scene.handle}" : sceneName,
-                GfxConfig.DelaySeconds.Value);
+                GfxConfig.DelaySeconds);
         }
         catch (Exception ex)
         {

@@ -69,14 +69,14 @@ at `<game>/BepInEx/config/gfxconf.cfg` — source of truth. In-game F10 overlay
 
 ### 4.1 Data flow
 
-1. `Awake()`: bind config entries, log banner, run initial sweep after
-   `DelaySeconds` (default 2 s).
+1. `Awake()`: bind config entries, log banner, run initial sweep after a
+   fixed 2 s delay.
 2. Subscribe to `SceneManager.sceneLoaded` and `SceneManager.sceneUnloaded`
    with strongly-held IL2CPP delegates. Scene events always update the loaded
-   set for render suppression; `ReapplyOnSceneLoad` only gates effect sweeps.
+   set for render suppression and always trigger an effect sweep.
 3. Scene suppression: match `SceneSuppressionAllowlist` against the full loaded
    set, not the active scene. When an allowlisted name is loaded, keep normal
-   rendering and UI active for `DelaySeconds`, then capture after one rendered
+   rendering and UI active for 2 s, then capture after one rendered
    frame with screen-space UI hidden. Restore the UI, set camera culling masks
     to zero, and disable post-process layers. Restore original state when no
     allowlisted scene remains. The initial veto set is empty; interactive
@@ -105,7 +105,7 @@ at `<game>/BepInEx/config/gfxconf.cfg` — source of truth. In-game F10 overlay
      `"[GFXConf] scene=73: AO=4, CA=4, SCPE.Fog=4, VolumetricFog=4, planar=0, quality=2"`.
 5. F10 overlay: controls the existing interactive settings; on change →
    `ConfigFile.Save()` + immediate sweep (effects flip live). The `[Quality]`
-   overrides are dropdowns; `EnableSceneSuppression` is a toggle that
+   overrides are cycle buttons; `EnableSceneSuppression` is a toggle that
    immediately re-evaluates suppression. The scene allowlist and
    capture-hotkey entries remain config-file-only, not F10 text controls.
 
@@ -140,11 +140,6 @@ ShadowDistance = KeepOriginal     ; KeepOriginal | float world units (e.g. 40 / 
 ShadowResolution = KeepOriginal   ; KeepOriginal | Low | Medium | High | VeryHigh
 LodBias = KeepOriginal            ; KeepOriginal | float (e.g. 0.8 / 0.7 / 0.6)
 MSAA = KeepOriginal               ; KeepOriginal | 0 | 2 | 4 | 8
-
-[General]
-ReapplyOnSceneLoad = true
-DelaySeconds = 2
-EnableF10Overlay = true
 
 [Scenes]
 EnableSceneSuppression = true

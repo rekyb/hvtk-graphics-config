@@ -29,10 +29,7 @@ internal sealed class GfxBehaviour : MonoBehaviour
     // single pump instance, and statics are proven to work on this injected
     // type (the _registered/_created flags already rely on it).
 
-    /// <summary>
-    /// Overlay visibility — F10 always closes it; opening requires
-    /// <c>EnableF10Overlay = true</c> (gate applies to opening only).
-    /// </summary>
+    /// <summary>Overlay visibility — F10 toggles it (open when closed, close when open).</summary>
     private static bool _visible;
 
     /// <summary>Initial window position/size for the GUILayout.Window path.</summary>
@@ -120,26 +117,43 @@ internal sealed class GfxBehaviour : MonoBehaviour
     /// <summary>Bold section header style, created once on first draw.</summary>
     private static GUIStyle _sectionStyle;
 
-    /// <summary>Italic, wrapping hint style for dropdown explanations, created once on first draw.</summary>
-    private static GUIStyle _hintStyle;
-
-    /// <summary>Id of the currently-open dropdown (0 = none); only one list can be open at a time.</summary>
-    private static int _openDropdown;
-
     /// <summary>
-    /// Dropdown options for <c>OverrideMode</c> (spec §4.2 domain) in contract
-    /// order: KeepOriginal, None, FastFXAA, FXAA, SMAA, TAA.
+    /// Cycle options for a string-domain override: <c>Value</c> is written to
+    /// the cfg (the spec §4.2 domain the sweep parser understands), <c>Label</c>
+    /// is the human-readable text the cycle button shows, so a numeric value
+    /// like "0.6" reads as "Fastest".
     /// </summary>
-    private static readonly string[] OverrideCycle =
+    private static readonly (string Value, string Label)[] OverrideModeOptions =
     {
-        "KeepOriginal", "None", "FastFXAA", "FXAA", "SMAA", "TAA"
+        ("KeepOriginal", "Keep Original"), ("None", "None"),
+        ("FastFXAA", "Fast FXAA"), ("FXAA", "FXAA"),
+        ("SMAA", "SMAA"), ("TAA", "TAA")
     };
 
-    /// <summary>Dropdown options for the four [Quality] overrides (KeepOriginal first).</summary>
-    private static readonly string[] ShadowDistancePresets = { "KeepOriginal", "40", "30", "25" };
-    private static readonly string[] ShadowResolutionPresets = { "KeepOriginal", "Low", "Medium", "High", "VeryHigh" };
-    private static readonly string[] LodBiasPresets = { "KeepOriginal", "0.8", "0.7", "0.6" };
-    private static readonly string[] MsaaPresets = { "KeepOriginal", "0", "2", "4", "8" };
+    private static readonly (string Value, string Label)[] ShadowDistanceOptions =
+    {
+        ("KeepOriginal", "Keep Original"), ("40", "Quality"),
+        ("30", "Balanced"), ("25", "Fastest")
+    };
+
+    private static readonly (string Value, string Label)[] ShadowResolutionOptions =
+    {
+        ("KeepOriginal", "Keep Original"), ("Low", "Low"),
+        ("Medium", "Medium"), ("High", "High"),
+        ("VeryHigh", "Very High")
+    };
+
+    private static readonly (string Value, string Label)[] LodBiasOptions =
+    {
+        ("KeepOriginal", "Keep Original"), ("0.8", "Quality"),
+        ("0.7", "Balanced"), ("0.6", "Fastest")
+    };
+
+    private static readonly (string Value, string Label)[] MsaaOptions =
+    {
+        ("KeepOriginal", "Keep Original"), ("0", "Off"),
+        ("2", "2x"), ("4", "4x"), ("8", "8x")
+    };
 
     /// <summary>
     /// Cached window callback (rules §3 "no allocations in hot paths"):
@@ -263,15 +277,9 @@ internal sealed class GfxBehaviour : MonoBehaviour
 
         HandleSceneCaptureHotkey();
 
-        // F10 toggle (contract amendment — gate exempts CLOSING): the key is
-        // ALWAYS read (no gate before GetKeyDown). An open overlay closes on
-        // F10 regardless of EnableF10Overlay, so unchecking the toggle while
-        // the overlay is open can never lock the user out of closing it. Only
-        // OPENING is gated: EnableF10Overlay false (or null — Bind failed,
-        // already warned once) → F10 does nothing while closed, no log line.
-        // GetKeyDown is only read once per frame, and any thrown failure
-        // latches F10 off for the session so a persistent input error cannot
-        // warn every frame.
+        // F10 toggles the overlay: open when closed, close when open. GetKeyDown
+        // is only read once per frame, and any thrown failure latches F10 off
+        // for the session so a persistent input error cannot warn every frame.
         if (_f10Broken)
         {
             return;
@@ -287,11 +295,7 @@ internal sealed class GfxBehaviour : MonoBehaviour
                 }
                 else
                 {
-                    var gate = GfxConfig.EnableF10Overlay;
-                    if (gate != null && gate.Value)
-                    {
-                        OpenOverlay();
-                    }
+                    OpenOverlay();
                 }
             }
         }
@@ -525,7 +529,7 @@ internal sealed class GfxBehaviour : MonoBehaviour
 
             _activeAllowedScenes.Clear();
             _activeAllowedScenes.UnionWith(currentTargets);
-            _snapshotReadyTime = Time.realtimeSinceStartup + Math.Max(0, GfxConfig.DelaySeconds?.Value ?? 2);
+            _snapshotReadyTime = Time.realtimeSinceStartup + GfxConfig.DelaySeconds;
             _snapshotDelayPending = true;
         }
         catch (Exception ex)
@@ -1254,7 +1258,6 @@ internal sealed class GfxBehaviour : MonoBehaviour
         _panelPos = new Vector2(PanelRect.x, PanelRect.y); // snap back to default
         _dragging = false;
         _windowRect = new Rect(20f, 20f, 360f, 520f);
-        _openDropdown = -1;
         _visible = true;
         GfxConfig.LogSource?.LogInfo("[GFXConf] overlay opened");
     }
@@ -1271,7 +1274,6 @@ internal sealed class GfxBehaviour : MonoBehaviour
     {
         _visible = false;
         _dragging = false;
-        _openDropdown = -1;
         GfxConfig.LogSource?.LogInfo("[GFXConf] overlay closed");
     }
 
@@ -1313,8 +1315,9 @@ internal sealed class GfxBehaviour : MonoBehaviour
     }
 
     /// <summary>
-    /// The scrollable controls: the 18 overlay-editable §4.2 entries under
-    /// their 5 section headers. Scene settings remain config-file-only. No
+    /// The scrollable controls: the overlay-editable §4.2 entries grouped under
+    /// their section headers, ordered General, Quality, then the post-processing
+    /// and volumetrics sections. Scene settings remain config-file-only. No
     /// reflection — only the known
     /// <see cref="GfxConfig"/> entries are ever listed. A null entry (Bind
     /// failed) draws a placeholder instead of throwing. Used by both the
@@ -1327,10 +1330,16 @@ internal sealed class GfxBehaviour : MonoBehaviour
             _sectionStyle = new GUIStyle(GUI.skin.label) { fontStyle = FontStyle.Bold };
         }
 
-        if (_hintStyle == null)
-        {
-            _hintStyle = new GUIStyle(GUI.skin.label) { fontStyle = FontStyle.Italic, wordWrap = true };
-        }
+        DrawSection("[General]");
+        GUILayout.Label($"Delay Seconds = {GfxConfig.DelaySeconds}");
+        DrawSceneSuppressionToggle();
+
+        DrawSection("[Quality]");
+        DrawOptionCycle(GfxConfig.OverrideMode, OverrideModeOptions);
+        DrawOptionCycle(GfxConfig.ShadowDistance, ShadowDistanceOptions);
+        DrawOptionCycle(GfxConfig.ShadowResolution, ShadowResolutionOptions);
+        DrawOptionCycle(GfxConfig.LodBias, LodBiasOptions);
+        DrawOptionCycle(GfxConfig.MSAA, MsaaOptions);
 
         DrawSection("[PPv2]");
         DrawToggle(GfxConfig.DisableAmbientOcclusion);
@@ -1340,7 +1349,7 @@ internal sealed class GfxBehaviour : MonoBehaviour
         DrawToggle(GfxConfig.DisableMotionBlur);
         DrawToggle(GfxConfig.DisableBloom);
 
-        DrawSection("[SCPE]");
+        DrawSection("[Scene Color Processing Effects]");
         DrawToggle(GfxConfig.DisableFog);
         DrawToggle(GfxConfig.DisableCloudShadows);
         DrawToggle(GfxConfig.DisableAmbientOcclusion2D);
@@ -1351,22 +1360,6 @@ internal sealed class GfxBehaviour : MonoBehaviour
         DrawToggle(GfxConfig.DisableVolumetricFog);
         DrawToggle(GfxConfig.DisablePlanarReflections);
         DrawToggle(GfxConfig.DisableAura2);
-
-        DrawSection("[Graphics]");
-        DrawStringDropdown(1, GfxConfig.OverrideMode, OverrideCycle, null);
-        DrawStringDropdown(2, GfxConfig.ShadowDistance, ShadowDistancePresets,
-            "Shadow draw distance in world units — lower shortens shadows (faster).");
-        DrawStringDropdown(3, GfxConfig.ShadowResolution, ShadowResolutionPresets, null);
-        DrawStringDropdown(4, GfxConfig.LodBias, LodBiasPresets,
-            "Detail distance — 0.6 = coarser (faster), 0.8 = finer (slower).");
-        DrawStringDropdown(5, GfxConfig.MSAA, MsaaPresets,
-            "Multisample anti-aliasing — 0 = off (fastest), 2/4/8 = smoother edges.");
-
-        DrawSection("[General]");
-        DrawToggle(GfxConfig.ReapplyOnSceneLoad);
-        DrawDelaySeconds();
-        DrawToggle(GfxConfig.EnableF10Overlay);
-        DrawSceneSuppressionToggle();
     }
 
     private static void DrawSection(string title)
@@ -1399,9 +1392,6 @@ internal sealed class GfxBehaviour : MonoBehaviour
             case nameof(GfxConfig.DisablePlanarReflections): return "Disable Planar Reflections";
             case nameof(GfxConfig.DisableAura2): return "Disable Aura 2";
             case nameof(GfxConfig.OverrideMode): return "Override Mode";
-            case nameof(GfxConfig.ReapplyOnSceneLoad): return "Reapply On Scene Load";
-            case nameof(GfxConfig.DelaySeconds): return "Delay Seconds";
-            case nameof(GfxConfig.EnableF10Overlay): return "Enable F10 Overlay";
             case nameof(GfxConfig.EnableSceneSuppression): return "Enable Scene Suppression";
             case nameof(GfxConfig.ShadowDistance): return "Shadow Distance";
             case nameof(GfxConfig.ShadowResolution): return "Shadow Resolution";
@@ -1434,14 +1424,12 @@ internal sealed class GfxBehaviour : MonoBehaviour
     }
 
     /// <summary>
-    /// A string-domain option (OverrideMode / [Quality] overrides) rendered as
-    /// a dropdown: the current value is a button that toggles an inline list
-    /// of options; selecting one writes it, saves the cfg and sweeps
-    /// immediately. An optional <paramref name="hint"/> renders as a small
-    /// italic line under the control so a numeric value like "0.7" reads as
-    /// human-meaningful.
+    /// A string-domain override (OverrideMode / [Quality]) is cycled by a
+    /// single button. The button shows the option's human-readable label
+    /// (e.g. "0.6" → "Fastest"); the cfg still stores the raw spec §4.2 value.
+    /// A change writes the entry, saves the cfg and sweeps immediately.
     /// </summary>
-    private static void DrawStringDropdown(int id, ConfigEntry<string> entry, string[] options, string hint)
+    private static void DrawOptionCycle(ConfigEntry<string> entry, (string Value, string Label)[] options)
     {
         if (entry == null)
         {
@@ -1450,33 +1438,41 @@ internal sealed class GfxBehaviour : MonoBehaviour
         }
 
         var current = entry.Value;
-        if (GUILayout.Button($"{Label(entry.Definition.Key)} = {current}"))
+        if (GUILayout.Button($"{Label(entry.Definition.Key)} = {DescribeOption(current, options)}"))
         {
-            _openDropdown = _openDropdown == id ? -1 : id;
+            entry.Value = NextOption(current, options);
+            ApplyChange();
         }
+    }
 
-        if (_openDropdown == id)
+    /// <summary>Label for a stored value; a hand-edited value not in the list shows verbatim.</summary>
+    private static string DescribeOption(string value, (string Value, string Label)[] options)
+    {
+        foreach (var option in options)
         {
-            foreach (var option in options)
+            if (string.Equals(option.Value, value, StringComparison.OrdinalIgnoreCase))
             {
-                var selected = string.Equals(option, current, StringComparison.OrdinalIgnoreCase);
-                if (GUILayout.Button((selected ? "● " : "   ") + option))
-                {
-                    _openDropdown = -1;
-                    if (!selected)
-                    {
-                        entry.Value = option;
-                        ApplyChange();
-                    }
-                    return;
-                }
+                return option.Label;
             }
         }
 
-        if (!string.IsNullOrEmpty(hint))
+        return value;
+    }
+
+    /// <summary>Next value in the cycle; an unrecognised value wraps to the first option.</summary>
+    private static string NextOption(string value, (string Value, string Label)[] options)
+    {
+        var index = -1;
+        for (var i = 0; i < options.Length; i++)
         {
-            GUILayout.Label(hint, _hintStyle);
+            if (string.Equals(options[i].Value, value, StringComparison.OrdinalIgnoreCase))
+            {
+                index = i;
+                break;
+            }
         }
+
+        return options[(index + 1) % options.Length].Value;
     }
 
     /// <summary>
@@ -1502,46 +1498,6 @@ internal sealed class GfxBehaviour : MonoBehaviour
             GfxConfig.Save();
             EvaluateSceneSuppression();
         }
-    }
-
-    /// <summary>
-    /// DelaySeconds: −/+ int adjustment clamped to 0..60, current value
-    /// shown. At a clamp limit the buttons are a no-op (no write, no sweep).
-    /// </summary>
-    private static void DrawDelaySeconds()
-    {
-        var entry = GfxConfig.DelaySeconds;
-        if (entry == null)
-        {
-            GUILayout.Label("(config unavailable — see log)");
-            return;
-        }
-
-        GUILayout.BeginHorizontal();
-        GUILayout.Label($"{Label(entry.Definition.Key)} = {entry.Value}", GUILayout.Width(170f));
-        if (GUILayout.Button("-", GUILayout.Width(30f)))
-        {
-            SetDelay(entry, entry.Value - 1);
-        }
-
-        if (GUILayout.Button("+", GUILayout.Width(30f)))
-        {
-            SetDelay(entry, entry.Value + 1);
-        }
-
-        GUILayout.EndHorizontal();
-    }
-
-    private static void SetDelay(ConfigEntry<int> entry, int proposed)
-    {
-        var clamped = Math.Clamp(proposed, 0, 60);
-        if (clamped == entry.Value)
-        {
-            return;
-        }
-
-        entry.Value = clamped;
-        ApplyChange();
     }
 
     /// <summary>
