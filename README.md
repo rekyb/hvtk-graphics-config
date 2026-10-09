@@ -4,7 +4,7 @@ A lightweight BepInEx mod for Heroes' Vow: Three Kingdoms that trims heavy visua
 
 ## Status
 
-**Released — v0.2.0.** Effect toggles, F10 overlay, and allowlisted idle-scene
+**Released — v0.3.0.** Effect toggles, F10 overlay, and allowlisted idle-scene
 render suppression are implemented and test-verified; see
 [`docs/superpowers/specs/`](docs/superpowers/specs/) for the approved designs.
 
