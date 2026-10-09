@@ -52,12 +52,13 @@ time it is reopened.
   opening. To turn the overlay back on, set `EnableF10Overlay = true` in
   `gfxconf.cfg` and restart (or re-check the toggle inside the open overlay
   before closing it).
-- **`OverrideMode` in the overlay is a cycle button:**
-  `KeepOriginal → None → FastFXAA → FXAA → SMAA → TAA → wrap`.
-- **`[Quality]` overrides are cycle buttons** (`KeepOriginal` first), one each
-  for `ShadowDistance`, `ShadowResolution`, `LodBias`, and `MSAA`. They apply
+- **`OverrideMode` in the overlay is a dropdown:** pick `KeepOriginal`, `None`,
+  `FastFXAA`, `FXAA`, `SMAA`, or `TAA`.
+- **`[Quality]` overrides are dropdowns** (`KeepOriginal` first), one each for
+  `ShadowDistance`, `ShadowResolution`, `LodBias`, and `MSAA`. They apply
   live to Unity's global `QualitySettings`; choosing `KeepOriginal` restores
-  the game's original value.
+  the game's original value. `ShadowDistance`, `LodBias`, and `MSAA` show a
+  short hint under the control explaining what the numeric value means.
 - **`EnableSceneSuppression` is a live master switch** for the idle-scene
   "scene pauser". Turn it **off** to keep live 3D rendering in allowlisted
   idle scenes, and **on** to re-freeze them — no restart needed. While off,

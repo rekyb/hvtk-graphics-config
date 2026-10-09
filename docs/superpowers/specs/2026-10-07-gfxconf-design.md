@@ -105,7 +105,7 @@ at `<game>/BepInEx/config/gfxconf.cfg` — source of truth. In-game F10 overlay
      `"[GFXConf] scene=73: AO=4, CA=4, SCPE.Fog=4, VolumetricFog=4, planar=0, quality=2"`.
 5. F10 overlay: controls the existing interactive settings; on change →
    `ConfigFile.Save()` + immediate sweep (effects flip live). The `[Quality]`
-   overrides are cycle buttons; `EnableSceneSuppression` is a toggle that
+   overrides are dropdowns; `EnableSceneSuppression` is a toggle that
    immediately re-evaluates suppression. The scene allowlist and
    capture-hotkey entries remain config-file-only, not F10 text controls.
 

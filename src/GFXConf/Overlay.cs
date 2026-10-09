@@ -120,16 +120,22 @@ internal sealed class GfxBehaviour : MonoBehaviour
     /// <summary>Bold section header style, created once on first draw.</summary>
     private static GUIStyle _sectionStyle;
 
+    /// <summary>Italic, wrapping hint style for dropdown explanations, created once on first draw.</summary>
+    private static GUIStyle _hintStyle;
+
+    /// <summary>Id of the currently-open dropdown (0 = none); only one list can be open at a time.</summary>
+    private static int _openDropdown;
+
     /// <summary>
-    /// The <c>OverrideMode</c> cycle (spec §4.2 domain) in contract order:
-    /// KeepOriginal → None → FastFXAA → FXAA → SMAA → TAA → wrap.
+    /// Dropdown options for <c>OverrideMode</c> (spec §4.2 domain) in contract
+    /// order: KeepOriginal, None, FastFXAA, FXAA, SMAA, TAA.
     /// </summary>
     private static readonly string[] OverrideCycle =
     {
         "KeepOriginal", "None", "FastFXAA", "FXAA", "SMAA", "TAA"
     };
 
-    /// <summary>Cycle presets for the four [Quality] overrides (KeepOriginal first).</summary>
+    /// <summary>Dropdown options for the four [Quality] overrides (KeepOriginal first).</summary>
     private static readonly string[] ShadowDistancePresets = { "KeepOriginal", "40", "30", "25" };
     private static readonly string[] ShadowResolutionPresets = { "KeepOriginal", "Low", "Medium", "High", "VeryHigh" };
     private static readonly string[] LodBiasPresets = { "KeepOriginal", "0.8", "0.7", "0.6" };
@@ -1248,6 +1254,7 @@ internal sealed class GfxBehaviour : MonoBehaviour
         _panelPos = new Vector2(PanelRect.x, PanelRect.y); // snap back to default
         _dragging = false;
         _windowRect = new Rect(20f, 20f, 360f, 520f);
+        _openDropdown = -1;
         _visible = true;
         GfxConfig.LogSource?.LogInfo("[GFXConf] overlay opened");
     }
@@ -1264,6 +1271,7 @@ internal sealed class GfxBehaviour : MonoBehaviour
     {
         _visible = false;
         _dragging = false;
+        _openDropdown = -1;
         GfxConfig.LogSource?.LogInfo("[GFXConf] overlay closed");
     }
 
@@ -1319,6 +1327,11 @@ internal sealed class GfxBehaviour : MonoBehaviour
             _sectionStyle = new GUIStyle(GUI.skin.label) { fontStyle = FontStyle.Bold };
         }
 
+        if (_hintStyle == null)
+        {
+            _hintStyle = new GUIStyle(GUI.skin.label) { fontStyle = FontStyle.Italic, wordWrap = true };
+        }
+
         DrawSection("[PPv2]");
         DrawToggle(GfxConfig.DisableAmbientOcclusion);
         DrawToggle(GfxConfig.DisableChromaticAberration);
@@ -1340,11 +1353,14 @@ internal sealed class GfxBehaviour : MonoBehaviour
         DrawToggle(GfxConfig.DisableAura2);
 
         DrawSection("[Graphics]");
-        DrawOverrideMode();
-        DrawQualityOverride(GfxConfig.ShadowDistance, ShadowDistancePresets);
-        DrawQualityOverride(GfxConfig.ShadowResolution, ShadowResolutionPresets);
-        DrawQualityOverride(GfxConfig.LodBias, LodBiasPresets);
-        DrawQualityOverride(GfxConfig.MSAA, MsaaPresets);
+        DrawStringDropdown(1, GfxConfig.OverrideMode, OverrideCycle, null);
+        DrawStringDropdown(2, GfxConfig.ShadowDistance, ShadowDistancePresets,
+            "Shadow draw distance in world units — lower shortens shadows (faster).");
+        DrawStringDropdown(3, GfxConfig.ShadowResolution, ShadowResolutionPresets, null);
+        DrawStringDropdown(4, GfxConfig.LodBias, LodBiasPresets,
+            "Detail distance — 0.6 = coarser (faster), 0.8 = finer (slower).");
+        DrawStringDropdown(5, GfxConfig.MSAA, MsaaPresets,
+            "Multisample anti-aliasing — 0 = off (fastest), 2/4/8 = smoother edges.");
 
         DrawSection("[General]");
         DrawToggle(GfxConfig.ReapplyOnSceneLoad);
@@ -1418,71 +1434,14 @@ internal sealed class GfxBehaviour : MonoBehaviour
     }
 
     /// <summary>
-    /// OverrideMode is a string domain, not a bool → a button that cycles
-    /// KeepOriginal → None → FastFXAA → FXAA → SMAA → TAA → wrap and shows
-    /// the current value.
+    /// A string-domain option (OverrideMode / [Quality] overrides) rendered as
+    /// a dropdown: the current value is a button that toggles an inline list
+    /// of options; selecting one writes it, saves the cfg and sweeps
+    /// immediately. An optional <paramref name="hint"/> renders as a small
+    /// italic line under the control so a numeric value like "0.7" reads as
+    /// human-meaningful.
     /// </summary>
-    private static void DrawOverrideMode()
-    {
-        var entry = GfxConfig.OverrideMode;
-        if (entry == null)
-        {
-            GUILayout.Label("(config unavailable — see log)");
-            return;
-        }
-
-        if (GUILayout.Button($"{Label(entry.Definition.Key)} = {entry.Value}"))
-        {
-            entry.Value = NextOverrideMode(entry.Value);
-            ApplyChange();
-        }
-    }
-
-    /// <summary>
-    /// Next value in the cycle. Values written are the spec §4.2 aliases the
-    /// sweep parser understands; a full enum member name typed by hand into
-    /// the cfg maps to its alias so the cycle keeps working, and an
-    /// unrecognised value counts as KeepOriginal (next press → None).
-    /// </summary>
-    private static string NextOverrideMode(string current)
-    {
-        var index = -1;
-        for (var i = 0; i < OverrideCycle.Length; i++)
-        {
-            if (string.Equals(OverrideCycle[i], current, StringComparison.OrdinalIgnoreCase))
-            {
-                index = i;
-                break;
-            }
-        }
-
-        if (index < 0)
-        {
-            switch (current?.Trim().ToLowerInvariant())
-            {
-                case "fastapproximateantialiasing":
-                    index = 2; // FastFXAA
-                    break;
-                case "subpixelmorphologicalantialiasing":
-                    index = 4; // SMAA
-                    break;
-                case "temporalantialiasing":
-                    index = 5; // TAA
-                    break;
-                default:
-                    index = 0; // unknown → treated as KeepOriginal, next = None
-                    break;
-            }
-        }
-
-        return OverrideCycle[(index + 1) % OverrideCycle.Length];
-    }
-
-    /// <summary>
-    /// A [Quality] override is a string domain (KeepOriginal or a preset
-    /// value), not a bool → a cycle button, same shape as OverrideMode.
-    /// </summary>
-    private static void DrawQualityOverride(ConfigEntry<string> entry, string[] presets)
+    private static void DrawStringDropdown(int id, ConfigEntry<string> entry, string[] options, string hint)
     {
         if (entry == null)
         {
@@ -1490,27 +1449,34 @@ internal sealed class GfxBehaviour : MonoBehaviour
             return;
         }
 
-        if (GUILayout.Button($"{Label(entry.Definition.Key)} = {entry.Value}"))
+        var current = entry.Value;
+        if (GUILayout.Button($"{Label(entry.Definition.Key)} = {current}"))
         {
-            entry.Value = NextPreset(entry.Value, presets);
-            ApplyChange();
+            _openDropdown = _openDropdown == id ? -1 : id;
         }
-    }
 
-    /// <summary>Next value in a quality cycle; an unrecognised value wraps to KeepOriginal.</summary>
-    private static string NextPreset(string current, string[] presets)
-    {
-        var index = -1;
-        for (var i = 0; i < presets.Length; i++)
+        if (_openDropdown == id)
         {
-            if (string.Equals(presets[i], current, StringComparison.OrdinalIgnoreCase))
+            foreach (var option in options)
             {
-                index = i;
-                break;
+                var selected = string.Equals(option, current, StringComparison.OrdinalIgnoreCase);
+                if (GUILayout.Button((selected ? "● " : "   ") + option))
+                {
+                    _openDropdown = -1;
+                    if (!selected)
+                    {
+                        entry.Value = option;
+                        ApplyChange();
+                    }
+                    return;
+                }
             }
         }
 
-        return presets[(index + 1) % presets.Length];
+        if (!string.IsNullOrEmpty(hint))
+        {
+            GUILayout.Label(hint, _hintStyle);
+        }
     }
 
     /// <summary>
