@@ -1360,6 +1360,42 @@ internal sealed class GfxBehaviour : MonoBehaviour
     }
 
     /// <summary>
+    /// Human-readable copy for a config key. Config keys are PascalCase
+    /// (mirroring spec §4.2); the overlay shows normal sentence-style labels
+    /// instead of the raw identifier. Unknown keys fall back to the raw key.
+    /// </summary>
+    private static string Label(string key)
+    {
+        switch (key)
+        {
+            case nameof(GfxConfig.DisableAmbientOcclusion): return "Disable Ambient Occlusion";
+            case nameof(GfxConfig.DisableChromaticAberration): return "Disable Chromatic Aberration";
+            case nameof(GfxConfig.DisableDepthOfField): return "Disable Depth of Field";
+            case nameof(GfxConfig.DisableScreenSpaceReflections): return "Disable Screen Space Reflections";
+            case nameof(GfxConfig.DisableMotionBlur): return "Disable Motion Blur";
+            case nameof(GfxConfig.DisableBloom): return "Disable Bloom";
+            case nameof(GfxConfig.DisableFog): return "Disable Fog";
+            case nameof(GfxConfig.DisableCloudShadows): return "Disable Cloud Shadows";
+            case nameof(GfxConfig.DisableAmbientOcclusion2D): return "Disable Ambient Occlusion 2D";
+            case nameof(GfxConfig.DisableBlur): return "Disable Blur";
+            case nameof(GfxConfig.DisableSharpen): return "Disable Sharpen";
+            case nameof(GfxConfig.DisableVolumetricFog): return "Disable Volumetric Fog";
+            case nameof(GfxConfig.DisablePlanarReflections): return "Disable Planar Reflections";
+            case nameof(GfxConfig.DisableAura2): return "Disable Aura 2";
+            case nameof(GfxConfig.OverrideMode): return "Override Mode";
+            case nameof(GfxConfig.ReapplyOnSceneLoad): return "Reapply On Scene Load";
+            case nameof(GfxConfig.DelaySeconds): return "Delay Seconds";
+            case nameof(GfxConfig.EnableF10Overlay): return "Enable F10 Overlay";
+            case nameof(GfxConfig.EnableSceneSuppression): return "Enable Scene Suppression";
+            case nameof(GfxConfig.ShadowDistance): return "Shadow Distance";
+            case nameof(GfxConfig.ShadowResolution): return "Shadow Resolution";
+            case nameof(GfxConfig.LodBias): return "LOD Bias";
+            case nameof(GfxConfig.MSAA): return "MSAA";
+            default: return key;
+        }
+    }
+
+    /// <summary>
     /// One row per bool entry: checkbox state IS the current value; the
     /// label is the bare config key (value shown by the checkbox itself).
     /// A change writes the entry, saves the cfg and sweeps immediately.
@@ -1373,7 +1409,7 @@ internal sealed class GfxBehaviour : MonoBehaviour
         }
 
         var current = entry.Value;
-        var next = GUILayout.Toggle(current, entry.Definition.Key);
+        var next = GUILayout.Toggle(current, Label(entry.Definition.Key));
         if (next != current)
         {
             entry.Value = next;
@@ -1395,7 +1431,7 @@ internal sealed class GfxBehaviour : MonoBehaviour
             return;
         }
 
-        if (GUILayout.Button($"OverrideMode = {entry.Value}"))
+        if (GUILayout.Button($"{Label(entry.Definition.Key)} = {entry.Value}"))
         {
             entry.Value = NextOverrideMode(entry.Value);
             ApplyChange();
@@ -1454,7 +1490,7 @@ internal sealed class GfxBehaviour : MonoBehaviour
             return;
         }
 
-        if (GUILayout.Button($"{entry.Definition.Key} = {entry.Value}"))
+        if (GUILayout.Button($"{Label(entry.Definition.Key)} = {entry.Value}"))
         {
             entry.Value = NextPreset(entry.Value, presets);
             ApplyChange();
@@ -1493,7 +1529,7 @@ internal sealed class GfxBehaviour : MonoBehaviour
         }
 
         var current = entry.Value;
-        var next = GUILayout.Toggle(current, entry.Definition.Key);
+        var next = GUILayout.Toggle(current, Label(entry.Definition.Key));
         if (next != current)
         {
             entry.Value = next;
@@ -1516,7 +1552,7 @@ internal sealed class GfxBehaviour : MonoBehaviour
         }
 
         GUILayout.BeginHorizontal();
-        GUILayout.Label($"DelaySeconds = {entry.Value}", GUILayout.Width(170f));
+        GUILayout.Label($"{Label(entry.Definition.Key)} = {entry.Value}", GUILayout.Width(170f));
         if (GUILayout.Button("-", GUILayout.Width(30f)))
         {
             SetDelay(entry, entry.Value - 1);
