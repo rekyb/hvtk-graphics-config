@@ -1316,8 +1316,8 @@ internal sealed class GfxBehaviour : MonoBehaviour
 
     /// <summary>
     /// The scrollable controls: the overlay-editable §4.2 entries grouped under
-    /// their section headers, ordered General, Quality, then the post-processing
-    /// and volumetrics sections. Scene settings remain config-file-only. No
+    /// their section headers, ordered Quality, then the post-processing,
+    /// volumetrics and extra sections. Scene settings remain config-file-only. No
     /// reflection — only the known
     /// <see cref="GfxConfig"/> entries are ever listed. A null entry (Bind
     /// failed) draws a placeholder instead of throwing. Used by both the
@@ -1330,10 +1330,6 @@ internal sealed class GfxBehaviour : MonoBehaviour
             _sectionStyle = new GUIStyle(GUI.skin.label) { fontStyle = FontStyle.Bold };
         }
 
-        DrawSection("[General]");
-        GUILayout.Label($"Delay Seconds = {GfxConfig.DelaySeconds}");
-        DrawSceneSuppressionToggle();
-
         DrawSection("[Quality]");
         DrawOptionCycle(GfxConfig.OverrideMode, OverrideModeOptions);
         DrawOptionCycle(GfxConfig.ShadowDistance, ShadowDistanceOptions);
@@ -1341,7 +1337,7 @@ internal sealed class GfxBehaviour : MonoBehaviour
         DrawOptionCycle(GfxConfig.LodBias, LodBiasOptions);
         DrawOptionCycle(GfxConfig.MSAA, MsaaOptions);
 
-        DrawSection("[PPv2]");
+        DrawSection("[Post Processing Stack v2]");
         DrawToggle(GfxConfig.DisableAmbientOcclusion);
         DrawToggle(GfxConfig.DisableChromaticAberration);
         DrawToggle(GfxConfig.DisableDepthOfField);
@@ -1360,6 +1356,11 @@ internal sealed class GfxBehaviour : MonoBehaviour
         DrawToggle(GfxConfig.DisableVolumetricFog);
         DrawToggle(GfxConfig.DisablePlanarReflections);
         DrawToggle(GfxConfig.DisableAura2);
+
+        DrawSection("[Extra]");
+        DrawSceneSuppressionToggle();
+        var captureKey = GfxConfig.CaptureSceneHotkey?.Value ?? KeyCode.F9;
+        GUILayout.Label($"Press {captureKey} in an idle scene to add it to the suppression list.");
     }
 
     private static void DrawSection(string title)
