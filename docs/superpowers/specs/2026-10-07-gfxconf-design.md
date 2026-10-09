@@ -70,7 +70,7 @@ at `<game>/BepInEx/config/gfxconf.cfg` — source of truth. In-game F10 overlay
 ### 4.1 Data flow
 
 1. `Awake()`: bind config entries, log banner, run initial sweep after a
-   fixed 2 s delay.
+   fixed 3 s delay.
 2. Subscribe to `SceneManager.sceneLoaded` and `SceneManager.sceneUnloaded`
    with strongly-held IL2CPP delegates. Scene events always update the loaded
    set for render suppression and always trigger an effect sweep.
@@ -85,10 +85,13 @@ at `<game>/BepInEx/config/gfxconf.cfg` — source of truth. In-game F10 overlay
     to catch late-created or re-enabled objects. F9 adds the latest loaded scene
     to the allowlist and saves the config.
 4. Sweep (single method, try/catch around each group):
-   - **Settings groups:** `Resources.FindObjectsOfTypeAll<PostProcessProfile>()`
+   - **Settings group:** `Resources.FindObjectsOfTypeAll<PostProcessProfile>()`
      (catches shared + volume-instantiated copies). For each `profile.settings`
      entry, match concrete type name against enabled toggles → set
-     `active = false`; `enabled.value = false`; `enabled.OverrideState = true`.
+     `active = false` and force `enabled` off via the native `Override(bool)`
+     method. The interop-generated `ParameterOverride<T>.value` property SETTER
+     is a silent no-op on this build (the getter works), so the write falls back
+     to a direct il2cpp field write by offset if `Override` does not land.
    - **Component groups:** `FindObjectsOfType` for `VolumetricFog`,
      `PlanarReflection` (Ceto), Aura2 `Aura`/`AuraVolume`/`AuraCamera`
      (type lookups by name across loaded assemblies; missing type = skip)
@@ -103,6 +106,11 @@ at `<game>/BepInEx/config/gfxconf.cfg` — source of truth. In-game F10 overlay
      application. Invalid values log one warning and are skipped.
    - Log one summary line per sweep:
      `"[GFXConf] scene=73: AO=4, CA=4, SCPE.Fog=4, VolumetricFog=4, planar=0, quality=2"`.
+   - **Hold (v0.4.0):** the game's weather/season system can rewrite
+     post-process profiles at runtime, so the captured settings are re-forced
+     off each frame in a `LateUpdate` hold (`Sweeper.Reapply`) — after the
+     game's Update, before the frame renders. Idempotent and cheap (no rescan);
+     the component and AA groups remain one-shot.
 5. F10 overlay: controls the existing interactive settings; on change →
    `ConfigFile.Save()` + immediate sweep (effects flip live). The `[Quality]`
    overrides are cycle buttons; `EnableSceneSuppression` is a toggle that
@@ -196,7 +204,7 @@ CaptureSceneHotkey = F9
 - `docs/superpowers/specs/2026-10-07-gfxconf-design.md` — this spec
 - `docs/superpowers/plans/…` — implementation plan (next step)
 - Installed artifact: `GFXConf.dll` + generated `gfxconf.cfg` in game folder
-- `docs/user-guide.md` — install/uninstall/config reference for the user
+- `README.md` — install/uninstall/config reference for the user
 
 ## 8. Explicitly out of scope
 

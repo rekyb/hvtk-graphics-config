@@ -306,6 +306,23 @@ internal sealed class GfxBehaviour : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// Runs after every <c>Update</c>: re-force the held effects off, so a
+    /// profile the game re-applied during its Update is off before this frame
+    /// renders. See <see cref="Sweeper.Reapply"/>.
+    /// </summary>
+    private void LateUpdate()
+    {
+        try
+        {
+            Sweeper.Reapply();
+        }
+        catch (Exception ex)
+        {
+            GfxConfig.LogSource?.LogWarning($"[GFXConf] effect hold failed: {ex}");
+        }
+    }
+
     private static void HandleSceneCaptureHotkey()
     {
         if (_captureHotkeyBroken)

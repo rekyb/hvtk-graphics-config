@@ -65,9 +65,8 @@ test-mod\  (= repo root)
 │   ├── project-config.md           # this file
 │   └── superpowers\specs\2026-10-07-gfxconf-design.md   # approved spec
 ├── src\GFXConf\               # plugin project (Plugin/Config/Sweep/Overlay .cs)
-├── tools\                     # UnityPy analysis scripts
-│   └── out\catalog.json           # asset scan catalog
-└── originals\                 # NOT committed (git-ignored binaries + source JSON)
+└── tools\                     # UnityPy analysis scripts
+    └── out\catalog.json           # asset scan catalog
 ```
 
 ## 5. Build & deploy commands

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Runtime.InteropServices;
 using UnityEngine;
 using UnityEngine.Rendering.PostProcessing;
 
@@ -15,6 +16,8 @@ namespace GFXConf;
 /// <item><see cref="RunNow"/> — executes when due: PPv2 + SCPE settings
 /// sweep, component disables (VolumetricFog / planar / aura) and the AA
 /// override, all with real counts in one summary line.</item>
+/// <item><see cref="Reapply"/> — per-frame hold: re-forces the disabled
+/// settings off after the game re-applies its profiles (see §4.1).</item>
 /// </list>
 /// </summary>
 internal static class Sweeper
@@ -103,6 +106,44 @@ internal static class Sweeper
         _pending = false;
         _sceneLabel = null;
         RunNow(label);
+    }
+
+    /// <summary>
+    /// Per-frame hold (v0.4.0): guards the disabled effects against the game
+    /// re-applying its post-process profiles during play (its weather/season
+    /// system rewrites them at runtime). Re-force every effect this plugin has
+    /// disabled back off, from the already-captured instances (no rescan).
+    /// Called from <c>GfxBehaviour.LateUpdate</c> so the write lands after the
+    /// game's Update and before the frame renders. Idempotent: only writes when
+    /// a held effect is (partly) on again. Never throws.
+    /// </summary>
+    internal static void Reapply()
+    {
+        if (_originalActive.Count == 0)
+        {
+            return;
+        }
+
+        foreach (var effect in _originalActive.Keys)
+        {
+            try
+            {
+                if (effect == null)
+                {
+                    continue; // destroyed wrapper
+                }
+
+                if (effect.active || effect.enabled.value || !effect.enabled.overrideState)
+                {
+                    effect.active = false;
+                    DisableEnabled(effect);
+                }
+            }
+            catch
+            {
+                // transient/destroyed instance — skip; a later sweep recaptures
+            }
+        }
     }
 
     /// <summary>
@@ -195,8 +236,7 @@ internal static class Sweeper
                                 }
 
                                 effect.active = false;
-                                effect.enabled.value = false;
-                                effect.enabled.overrideState = true;
+                                DisableEnabled(effect);
                                 counts[typeName]++;
                             }
                             else if (_originalActive.TryGetValue(effect, out var original))
@@ -647,6 +687,71 @@ internal static class Sweeper
         }
 
         _qualityOriginals.Remove(key);
+    }
+
+    /// <summary>
+    /// Forces an effect's <c>enabled</c> override off. The interop-generated
+    /// <c>ParameterOverride&lt;T&gt;.value</c> property SETTER is a silent
+    /// no-op on this build (the getter works), so this calls the native
+    /// <c>Override(bool)</c> method and, if that does not land, writes the
+    /// il2cpp field directly by offset (the same write the native setter
+    /// performs). Never throws.
+    /// </summary>
+    private static void DisableEnabled(PostProcessEffectSettings effect)
+    {
+        var enabled = effect.enabled;
+        if (enabled == null)
+        {
+            return;
+        }
+
+        try
+        {
+            enabled.Override(false);
+            if (!enabled.value)
+            {
+                return;
+            }
+        }
+        catch
+        {
+            // fall through to the direct field write
+        }
+
+        try
+        {
+            var field = FindField(enabled.ObjectClass, "value");
+            if (field != IntPtr.Zero)
+            {
+                var offset = (int)Il2CppInterop.Runtime.IL2CPP.il2cpp_field_get_offset(field);
+                Marshal.WriteByte(IntPtr.Add(enabled.Pointer, offset), 0);
+            }
+        }
+        catch
+        {
+            // give up — the effect simply stays on for this instance
+        }
+    }
+
+    /// <summary>
+    /// Resolves a field by name walking the class hierarchy (<c>value</c>
+    /// lives on the generic base <c>ParameterOverride&lt;T&gt;</c>, not on
+    /// <c>BoolParameter</c>). Returns <c>IntPtr.Zero</c> when absent.
+    /// </summary>
+    private static IntPtr FindField(IntPtr klass, string name)
+    {
+        while (klass != IntPtr.Zero)
+        {
+            var field = Il2CppInterop.Runtime.IL2CPP.il2cpp_class_get_field_from_name(klass, name);
+            if (field != IntPtr.Zero)
+            {
+                return field;
+            }
+
+            klass = Il2CppInterop.Runtime.IL2CPP.il2cpp_class_get_parent(klass);
+        }
+
+        return IntPtr.Zero;
     }
 
     /// <summary>

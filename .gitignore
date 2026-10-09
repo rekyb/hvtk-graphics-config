@@ -1,5 +1,4 @@
 # large game files must never be committed
-originals/*.assets
 *.assets
 *.resource
 *.resS

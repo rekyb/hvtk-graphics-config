@@ -48,8 +48,8 @@ internal static class GfxConfig
 
     // The old [General] keys are gone in v0.4.0: reapply-on-scene-load and the
     // F10 overlay are always on, and the post-scene delay is a fixed constant.
-    /// <summary>Seconds after a scene load before the sweep runs and idle-scene capture begins. Fixed at 2 s.</summary>
-    internal const int DelaySeconds = 2;
+    /// <summary>Seconds after a scene load before the sweep runs and idle-scene capture begins. Fixed at 3 s.</summary>
+    internal const int DelaySeconds = 3;
 
     // [Quality] — render-quality overrides (Built-in RP QualitySettings); KeepOriginal = no-op.
     internal static ConfigEntry<string> ShadowDistance;

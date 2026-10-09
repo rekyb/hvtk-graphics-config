@@ -1,8 +1,8 @@
 # hvtk-context — Heroes' Vow: Three Kingdoms Performance Context
 
-> Source: converted verbatim from `legend_of_heros_unity_performance_context.json`
-> (kept in `originals\`). This is the original problem context for the low-effects
-> work; the current approach and design live in
+> Source: converted verbatim from the original
+> `legend_of_heros_unity_performance_context.json`. This is the original problem
+> context for the low-effects work; the current approach and design live in
 > `docs/superpowers/specs/2026-10-07-gfxconf-design.md`.
 
 ## Task
